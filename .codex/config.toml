@@ -1,0 +1,9 @@
+# Codex project config. Loaded only when this project is trusted in Codex.
+# Project instructions live in AGENTS.md (Codex reads it automatically).
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+# pnpm install and Workers AI calls during `wrangler dev` need network.
+network_access = true

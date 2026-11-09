@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm -r test:*)",
+      "Bash(pnpm --filter web build:*)",
+      "Bash(pnpm --filter web test:*)",
+      "Bash(pnpm --filter worker test:*)",
+      "Bash(pnpm --filter worker exec tsc:*)",
+      "Bash(pnpm --filter worker exec wrangler types:*)",
+      "Bash(pnpm --filter worker exec wrangler d1 migrations apply expense-dev --local:*)",
+      "Bash(pnpm --filter worker exec wrangler d1 migrations list:*)",
+      "Bash(pnpm --filter worker exec drizzle-kit generate:*)"
+    ],
+    "deny": [
+      "Bash(*wrangler deploy*)",
+      "Bash(*wrangler secret*)",
+      "Bash(*wrangler rollback*)",
+      "Bash(*wrangler d1 time-travel*)",
+      "Bash(*--remote*)",
+      "Read(./worker/.dev.vars)",
+      "Read(./**/.dev.vars)",
+      "Edit(./**/.dev.vars)"
+    ]
+  }
+}
