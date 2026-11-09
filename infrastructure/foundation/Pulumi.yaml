@@ -1,0 +1,12 @@
+name: expense-foundation
+description: Long-lived Cloudflare resources for Expense Tracker (D1 database, receipt queues)
+runtime:
+  name: nodejs
+  options:
+    packagemanager: pnpm
+    typescript: true
+config:
+  expense-foundation:d1LocationHint:
+    type: string
+    default: apac
+    description: D1 primary location hint (apac = closest to SGT users)

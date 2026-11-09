@@ -1,0 +1,9 @@
+config:
+  # Required (see infrastructure/README.md):
+  #   expense-services:appOrigin           https://expense-tracker-staging.<sub>.workers.dev
+  #   expense-services:googleClientId      --secret
+  #   expense-services:googleClientSecret  --secret
+  #   expense-services:tokenEncKey         --secret  (openssl rand -base64 32)
+  #   expense-services:sessionSecret       --secret
+  #   expense-services:allowedEmails       --secret  (comma-separated)
+  expense-services:defaultCurrency: SGD

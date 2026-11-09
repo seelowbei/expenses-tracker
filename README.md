@@ -8,7 +8,7 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
 ## Status
 
-Pre-code. Nothing is scaffolded yet. Work follows the spec's milestones:
+Pre-code. `infrastructure/` and `worker/wrangler.jsonc` exist; the foundation stacks (D1 + queues) are applied for staging and production. Work follows the spec's milestones:
 
 | Milestone | Scope |
 | --- | --- |
@@ -31,6 +31,7 @@ Pre-code. Nothing is scaffolded yet. Work follows the spec's milestones:
 | File storage | Google Drive API v3, `drive.file` scope |
 | Validation | Zod (API bodies + LLM output) |
 | Tooling | pnpm workspaces, Wrangler, Vitest + `@cloudflare/vitest-pool-workers`, GitHub Actions |
+| Infrastructure | Pulumi (TypeScript, Pulumi Cloud state), `@pulumi/cloudflare` |
 
 ```text
 Browser (SPA) ──► Worker fetch ──► Google Drive (save file)
@@ -51,54 +52,43 @@ worker/
   src/agent/            Extraction prompt, Zod schema, post-validation
   src/db/               Drizzle schema + queries
   migrations/           D1 SQL migrations
-  wrangler.jsonc
+  wrangler.jsonc        Local dev, bundling, remote migrations
+infrastructure/
+  foundation/           Pulumi: D1, queues (long-lived)
+  services/             Pulumi: Worker deploy (per release)
 .github/workflows/deploy.yml
 ```
 
 ## Prerequisites
 
-- Node.js 22+ and pnpm 9+
+- Node.js 22+ and pnpm 10+
 - A Cloudflare account (Free plan) and `wrangler login`
+- Pulumi CLI logged in to Pulumi Cloud (staging/production only)
 - A Google Cloud project with the Drive API enabled
+
+## Environments
+
+| Env | URL | D1 | Queue | Provisioned by | Deploy trigger |
+| --- | --- | --- | --- | --- | --- |
+| local | `localhost:8787` | Local SQLite (Miniflare) | Local | — | `wrangler dev` |
+| staging | `expense-tracker-staging.<sub>.workers.dev` | `expense-staging` | `receipts-staging` | Pulumi stack `staging` | Push to `main` |
+| production | Custom domain or `expense-tracker-production.<sub>.workers.dev` | `expense-production` | `receipts-production` | Pulumi stack `production` | Git tag `v*` |
 
 ## One-time setup
 
-**Cloudflare**
+**Cloudflare + Pulumi:** provision staging and production with [`infrastructure/`](./infrastructure/README.md). `foundation` creates D1 and the queues; `services` holds the Worker config and secrets.
 
-```bash
-cd worker
-npx wrangler d1 create expense-dev
-npx wrangler d1 create expense-prod
-npx wrangler queues create receipts-dev
-npx wrangler queues create receipts-dev-dlq
-npx wrangler queues create receipts-prod
-npx wrangler queues create receipts-prod-dlq
-```
-
-Put the D1 database ids into `worker/wrangler.jsonc`.
-
-The Llama 3.2 Vision model requires accepting Meta's license once per Cloudflare account: send a single request to `@cf/meta/llama-3.2-11b-vision-instruct` with the prompt `agree` before the first real call.
+**Workers AI:** the Llama 3.2 Vision model requires accepting Meta's license once per Cloudflare account. Send one request to `@cf/meta/llama-3.2-11b-vision-instruct` with the prompt `agree` before the first real call.
 
 **Google Cloud**
 
 1. Configure the OAuth consent screen (External). Scopes: `openid`, `email`, `profile`, `https://www.googleapis.com/auth/drive.file`. Add both accounts as test users while building; publish to **In production** before daily use (avoids Testing mode's 7-day refresh-token expiry).
 2. Create two OAuth Web clients (dev, prod) with redirect URIs:
-   - `http://localhost:8787/auth/google/callback`
-   - `https://expense-dev.<sub>.workers.dev/auth/google/callback`
-   - `https://<prod-domain>/auth/google/callback`
+   - `http://localhost:8787/auth/google/callback` (dev)
+   - `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` (dev)
+   - `https://<production-origin>/auth/google/callback` (prod)
 
-**Secrets** (per environment)
-
-```bash
-npx wrangler secret put GOOGLE_CLIENT_ID --env dev
-npx wrangler secret put GOOGLE_CLIENT_SECRET --env dev
-npx wrangler secret put TOKEN_ENC_KEY --env dev    # openssl rand -base64 32
-npx wrangler secret put SESSION_SECRET --env dev   # signs the OAuth state cookie
-```
-
-Repeat without `--env dev` for prod. `ALLOWED_EMAILS` (comma-separated allow-list of the two users) is set as a var or secret per environment.
-
-**GitHub repo secrets:** `CLOUDFLARE_API_TOKEN` (Workers Scripts, D1, Queues edit) and `CLOUDFLARE_ACCOUNT_ID`.
+**GitHub repo secrets:** `CLOUDFLARE_API_TOKEN` (Account: Workers Scripts, D1, Queues edit; Zone: Workers Routes edit for a custom domain), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`.
 
 ## Local development
 
@@ -107,22 +97,19 @@ Create `worker/.dev.vars` (git-ignored):
 ```ini
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-TOKEN_ENC_KEY=...
-SESSION_SECRET=...
+TOKEN_ENC_KEY=...        # openssl rand -base64 32
+SESSION_SECRET=...       # openssl rand -base64 32
 ALLOWED_EMAILS=you@example.com,partner@example.com
-APP_ORIGIN=http://localhost:8787
 ```
-
-`APP_ORIGIN` must be overridden locally because the top-level `vars` in `wrangler.jsonc` point at prod.
 
 ```bash
 pnpm install
-pnpm --filter worker exec wrangler d1 migrations apply expense-dev --local
+pnpm --filter worker exec wrangler d1 migrations apply expense-local --local
 pnpm --filter web build
 pnpm --filter worker exec wrangler dev
 ```
 
-App runs at http://localhost:8787 with local D1 and Queues (Miniflare). Workers AI calls go to Cloudflare even in local dev and count against the daily neuron quota.
+App runs at http://localhost:8787 with local D1 and Queues (Miniflare). The top-level `wrangler.jsonc` config is local-only. Workers AI calls go to Cloudflare even in local dev and count against the daily neuron quota.
 
 ## Tests
 
@@ -134,16 +121,10 @@ Worker tests run inside the Workers runtime via `@cloudflare/vitest-pool-workers
 
 ## Deployment
 
-| Env | URL | D1 | Queue | Trigger |
-| --- | --- | --- | --- | --- |
-| local | `localhost:8787` | Local SQLite | Local | `wrangler dev` |
-| dev | `expense-dev.<sub>.workers.dev` | `expense-dev` | `receipts-dev` | Push to `main` |
-| prod | Custom domain or workers.dev | `expense-prod` | `receipts-prod` | Git tag `v*` |
-
-CI runs tests, builds the SPA, applies D1 migrations (`--remote`), then `wrangler deploy`.
+CI runs tests, builds the SPA and Worker bundle, applies D1 migrations (`--remote`), then runs `pulumi up` on `infrastructure/services` for the target stack. `infrastructure/foundation` is applied manually. Details: [`infrastructure/README.md`](./infrastructure/README.md).
 
 - **Migrations are additive only** in the same release as the code (new tables, nullable columns). Drop or rename only in a later release.
-- **Rollback:** `wrangler rollback [--env dev]`. Restore D1 with `wrangler d1 time-travel` if a migration goes wrong.
+- **Rollback:** re-run the workflow for the previous tag. Emergency: `wrangler rollback --name expense-tracker-<env>`, then redeploy through CI. Restore D1 with `wrangler d1 time-travel` if a migration goes wrong.
 
 ## Free-plan limits
 

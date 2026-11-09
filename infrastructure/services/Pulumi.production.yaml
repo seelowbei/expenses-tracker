@@ -1,0 +1,6 @@
+config:
+  # Required: same keys as Pulumi.staging.yaml, with the production OAuth client.
+  # Optional custom domain (otherwise served on workers.dev):
+  #   expense-services:customDomain        expenses.example.com
+  #   expense-services:zoneId              <cloudflare-zone-id>
+  expense-services:defaultCurrency: SGD

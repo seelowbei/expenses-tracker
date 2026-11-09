@@ -1,0 +1,15 @@
+name: expense-services
+description: Builds and deploys the Expense Tracker Worker (SPA assets + API + queue consumer)
+runtime:
+  name: nodejs
+  options:
+    packagemanager: pnpm
+    typescript: true
+config:
+  expense-services:defaultCurrency:
+    type: string
+    default: SGD
+  expense-services:compatibilityDate:
+    type: string
+    default: "2026-11-01"
+    description: Keep in sync with worker/wrangler.jsonc

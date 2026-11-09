@@ -1,0 +1,17 @@
+{
+  "name": "@expense/infra-foundation",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pulumi/cloudflare": "6.23.3",
+    "@pulumi/pulumi": "3.274.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^5.9.3"
+  }
+}

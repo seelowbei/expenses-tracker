@@ -21,10 +21,14 @@ worker/src/drive/    Drive v3 client (drive.file scope)
 worker/src/agent/    prompt, Zod Extraction schema, post-validation rules
 worker/src/db/       Drizzle schema + queries
 worker/migrations/   D1 SQL migrations
-worker/wrangler.jsonc
+worker/wrangler.jsonc   local dev, bundling, remote D1 migrations only
+infrastructure/foundation/  Pulumi: D1 + queues per env (long-lived, protected)
+infrastructure/services/    Pulumi: Worker script, assets, bindings, secrets, queue consumer, routing
 ```
 
-pnpm workspace with two packages: `web` and `worker`.
+pnpm workspace: `web`, `worker`, `infrastructure/*`.
+
+**Environments:** `local` (`wrangler dev` + Miniflare, no Pulumi), `staging` and `production` (Pulumi stacks of the same name in both infra projects). Resource names follow `<thing>-<env>`, e.g. `expense-staging`, `receipts-production`, `expense-tracker-staging`.
 
 ## Commands
 
@@ -33,9 +37,12 @@ pnpm install
 pnpm -r test                                          # all tests
 pnpm --filter worker test                             # worker tests (vitest-pool-workers)
 pnpm --filter web build                               # SPA -> web/dist (needed before wrangler dev)
+pnpm --filter worker bundle                           # Worker -> worker/dist/index.js (for Pulumi services)
 pnpm --filter worker exec wrangler dev                # local app on :8787
-pnpm --filter worker exec wrangler d1 migrations apply expense-dev --local
+pnpm --filter worker exec wrangler d1 migrations apply expense-local --local
 pnpm --filter worker exec tsc --noEmit                # typecheck
+pnpm --filter "./infrastructure/*" typecheck          # Pulumi programs
+(cd infrastructure/services && pulumi preview -s staging)   # needs build outputs + Pulumi login
 ```
 
 Run typecheck and the relevant tests before calling a change done.
@@ -54,6 +61,13 @@ Run typecheck and the relevant tests before calling a change done.
 - Never sum across currencies. Totals are grouped by `category_id, month, currency`. No FX conversion.
 - D1 is the source of truth; a missing Drive file must never lose ledger data.
 - Migrations are **additive only** (new tables, nullable columns). Drops/renames go in a later release.
+
+**Infrastructure**
+- Workers Free plan only: no containers, R2, KV or Durable Objects in Pulumi either.
+- Pulumi `services` is the source of truth for deployed bindings and secrets. A new binding goes in both `infrastructure/services/index.ts` and `worker/wrangler.jsonc` (local).
+- Never rename `foundation` resources or the D1 `name`; that replaces the database. D1 stays `protect: true`.
+- Keep `compatibilityDate` in sync between `services` config and `wrangler.jsonc`.
+- `worker/package.json` must define `"bundle": "wrangler deploy --dry-run --outdir dist"`. Call the script, not wrangler directly; the Claude deny rules block any command containing `wrangler deploy`.
 
 **Security**
 - Every query filters by `user_id` from the session — never from request input.
@@ -82,7 +96,8 @@ Run typecheck and the relevant tests before calling a change done.
 
 ## Do not
 
-- Run `wrangler deploy`, `wrangler secret put`, `wrangler rollback`, or any `--remote` D1 command. Deployment is CI-only (push to `main` → dev, tag `v*` → prod).
+- Run `wrangler deploy`, `wrangler secret put`, `wrangler rollback`, or any `--remote` D1 command. Deployment is CI-only (push to `main` → staging, tag `v*` → production).
+- Run `pulumi up`, `pulumi destroy`, `pulumi refresh`, `pulumi state`, `pulumi stack rm/init` or `pulumi config set`. `pulumi preview` is fine. Ask the user to apply.
 - Read, print or commit `worker/.dev.vars` or any secret.
 - Add dependencies that need Node-only APIs beyond `nodejs_compat`, or that are large enough to hurt cold start/CPU.
 - Send real receipt images or personal data to any service other than Workers AI and Google Drive.
@@ -92,6 +107,5 @@ Run typecheck and the relevant tests before calling a change done.
 These are inconsistencies in the current spec. Ask before choosing:
 
 1. "Invalid LLM JSON twice → entry created with nulls" conflicts with `ledger_entries` `NOT NULL` on `merchant`, `txn_date`, `total_minor`, `category_id`.
-2. `ALLOWED_EMAILS` is referenced but not listed in `wrangler.jsonc` vars or the secrets list.
-3. AI-quota retry "to land after 00:05 UTC" may exceed the Queues maximum `delaySeconds`; verify the current limit before relying on it.
-4. Line-item check `total - tax` is undefined when `tax` is null (treat as 0?).
+2. AI-quota retry "to land after 00:05 UTC" may exceed the Queues maximum `delaySeconds`; verify the current limit before relying on it.
+3. Line-item check `total - tax` is undefined when `tax` is null (treat as 0?).

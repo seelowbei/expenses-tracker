@@ -49,6 +49,7 @@ The stack is a static SPA with a Hono API on a single Worker. It avoids server r
 | File storage | Google Drive API v3, `drive.file` scope | Uses the user's own quota; costs $0 |
 | Validation | Zod (request bodies + LLM output schema) | One schema for both API and agent output |
 | Tooling | Wrangler, pnpm, Vitest + `@cloudflare/vitest-pool-workers`, GitHub Actions | Local emulation of D1/Queues; CI deploys |
+| Infrastructure | Pulumi (TypeScript, Pulumi Cloud state) + `@pulumi/cloudflare` | Typed, reviewable infra; long-lived resources split from per-release deploys |
 
 ## Data model (D1)
 
@@ -283,36 +284,51 @@ Sources: [Workers limits](https://developers.cloudflare.com/workers/platform/lim
 
 ## Deployment
 
-The app deploys as one Worker per environment, serving both the SPA and the API. GitHub Actions runs tests, applies D1 migrations, then runs `wrangler deploy`.
+The app deploys as one Worker per environment, serving both the SPA and the API. Infrastructure is defined with Pulumi (TypeScript, state in Pulumi Cloud) in two projects: `foundation` provisions the long-lived resources and `services` builds and deploys the Worker onto them. GitHub Actions runs tests, applies D1 migrations, then runs `pulumi up` for `services`.
 
 **Repo layout**
 
 ```text
 expense-tracker/
+  documents/           # this spec and other project docs
   web/                 # Vite + React SPA -> web/dist
   worker/
     src/index.ts       # Hono app: fetch + queue handlers
     src/auth/  src/drive/  src/agent/  src/db/
     migrations/        # D1 SQL migrations (Drizzle-generated)
-    wrangler.jsonc
+    wrangler.jsonc     # local dev, bundling, remote D1 migrations
+  infrastructure/
+    foundation/        # Pulumi: D1 database, receipt queue + DLQ (protected, applied manually)
+    services/          # Pulumi: Worker script, assets, bindings, queue consumer, routing (CI)
   .github/workflows/deploy.yml
 ```
 
 **Environments**
 
-| Env | URL | D1 | Queue | Google OAuth client | Deploy trigger |
-| --- | --- | --- | --- | --- | --- |
-| local | `localhost:8787` | Local SQLite (Miniflare) | Local | Dev client, redirect to localhost | `wrangler dev` |
-| dev | `expense-dev.<sub>.workers.dev` | `expense-dev` | `receipts-dev` | Dev client | Push to `main` |
-| prod | Custom domain (Cloudflare free zone) | `expense-prod` | `receipts-prod` | Prod client | Git tag `v*` |
+| Env | URL | D1 | Queue | Google OAuth client | Provisioned by | Deploy trigger |
+| --- | --- | --- | --- | --- | --- | --- |
+| local | `localhost:8787` | Local SQLite (Miniflare) | Local | Dev client, redirect to localhost | — | `wrangler dev` |
+| staging | `expense-tracker-staging.<sub>.workers.dev` | `expense-staging` | `receipts-staging` | Dev client | Pulumi stacks `staging` | Push to `main` |
+| production | Custom domain, or `expense-tracker-production.<sub>.workers.dev` | `expense-production` | `receipts-production` | Prod client | Pulumi stacks `production` | Git tag `v*` |
+
+**Pulumi projects**
+
+| Project | Resources | Outputs / inputs | Applied |
+| --- | --- | --- | --- |
+| `expense-foundation` | `D1Database` (protected), `Queue` receipts + DLQ | Exports account id, D1 id/name, queue id/name, DLQ name | Manually, on change |
+| `expense-services` | `WorkersScript` (bundle + `web/dist` assets + bindings), `QueueConsumer`, `WorkersScriptSubdomain`, optional `WorkersCustomDomain` | Reads foundation outputs via `StackReference` to the same stack name | CI on every deploy |
+
+The `services` stack sets the deployed bindings: `AI`, `DB`, `RECEIPT_QUEUE`, `APP_ORIGIN`, `DEFAULT_CURRENCY` and the secrets. The queue consumer uses `batchSize: 1`, `maxRetries: 3` and the DLQ. With a batch size of 1, each receipt runs in its own invocation, so its CPU budget and failure stay separate from other receipts.
 
 **wrangler.jsonc (abridged)**
+
+Wrangler is no longer the deployment source. It runs local dev, bundles the Worker (the `worker` package's `bundle` script, which runs `wrangler deploy --dry-run --outdir dist`) and applies remote D1 migrations. The top-level config is local-only; the `staging` and `production` blocks exist only so migrations can find each database.
 
 ```jsonc
 {
   "name": "expense-tracker",
   "main": "src/index.ts",
-  "compatibility_date": "2026-11-01",
+  "compatibility_date": "2026-11-01",       // keep in sync with services config
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "../web/dist",
@@ -320,41 +336,35 @@ expense-tracker/
     "run_worker_first": ["/api/*", "/auth/*"]
   },
   "ai": { "binding": "AI" },
-  "d1_databases": [{ "binding": "DB", "database_name": "expense-prod", "database_id": "<id>", "migrations_dir": "migrations" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "expense-local", "database_id": "local", "migrations_dir": "migrations" }],
   "queues": {
-    "producers": [{ "binding": "RECEIPT_QUEUE", "queue": "receipts-prod" }],
-    "consumers": [{ "queue": "receipts-prod", "max_batch_size": 1, "max_retries": 3, "dead_letter_queue": "receipts-prod-dlq" }]
+    "producers": [{ "binding": "RECEIPT_QUEUE", "queue": "receipts-local" }],
+    "consumers": [{ "queue": "receipts-local", "max_batch_size": 1, "max_retries": 3, "dead_letter_queue": "receipts-local-dlq" }]
   },
-  "vars": { "APP_ORIGIN": "https://<prod-domain>", "DEFAULT_CURRENCY": "SGD" },
+  "vars": { "APP_ORIGIN": "http://localhost:8787", "DEFAULT_CURRENCY": "SGD" },
   "observability": { "enabled": true },
   "env": {
-    "dev": {
-      "d1_databases": [{ "binding": "DB", "database_name": "expense-dev", "database_id": "<id>", "migrations_dir": "migrations" }],
-      "queues": {
-        "producers": [{ "binding": "RECEIPT_QUEUE", "queue": "receipts-dev" }],
-        "consumers": [{ "queue": "receipts-dev", "max_batch_size": 1, "max_retries": 3, "dead_letter_queue": "receipts-dev-dlq" }]
-      },
-      "vars": { "APP_ORIGIN": "https://expense-dev.<sub>.workers.dev", "DEFAULT_CURRENCY": "SGD" }
-    }
+    "staging":    { "d1_databases": [{ "binding": "DB", "database_name": "expense-staging",    "database_id": "<foundation staging d1DatabaseId>",    "migrations_dir": "migrations" }] },
+    "production": { "d1_databases": [{ "binding": "DB", "database_name": "expense-production", "database_id": "<foundation production d1DatabaseId>", "migrations_dir": "migrations" }] }
   }
 }
 ```
 
-With `max_batch_size: 1`, each receipt runs in its own invocation, so its CPU budget and failure stay separate from other receipts.
+**Secrets**
 
-**Secrets (per env, `wrangler secret put <NAME> [--env dev]`)**
-
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- `TOKEN_ENC_KEY`: 32 random bytes, base64 (`openssl rand -base64 32`)
-- `SESSION_SECRET`: signs the OAuth state cookie
-- Local: `worker/.dev.vars` (git-ignored)
+- Deployed (per stack, `pulumi config set --secret <key> -s <stack>` in `infrastructure/services`): `googleClientId`, `googleClientSecret`, `tokenEncKey` (32 random bytes, base64: `openssl rand -base64 32`), `sessionSecret` (signs the OAuth state cookie), `allowedEmails` (comma-separated allow-list). They become the Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENC_KEY`, `SESSION_SECRET` and `ALLOWED_EMAILS`.
+- Non-secret per stack: `appOrigin`, optional `customDomain` + `zoneId` (production).
+- Local: `worker/.dev.vars` (git-ignored) with the same names in upper case.
 
 **One-time setup**
 
-1. Cloudflare: `wrangler d1 create expense-dev` / `expense-prod`; `wrangler queues create receipts-dev`, `receipts-dev-dlq`, `receipts-prod`, `receipts-prod-dlq`. Put the ids in `wrangler.jsonc`.
-2. Google Cloud: create a project, enable the Drive API, and configure the OAuth consent screen (External; add both accounts as test users while building, then Publish app to In production before daily use). Use scopes `openid`, `email`, `profile`, `drive.file`.
-3. Create two OAuth Web clients (dev, prod) with redirect URIs `http://localhost:8787/auth/google/callback`, `https://expense-dev.<sub>.workers.dev/auth/google/callback` and `https://<prod-domain>/auth/google/callback`.
-4. GitHub repo secrets: `CLOUDFLARE_API_TOKEN` (Workers Scripts, D1, Queues edit) and `CLOUDFLARE_ACCOUNT_ID`.
+1. Pulumi: `pulumi login` (Pulumi Cloud), then `pulumi stack init staging` and `pulumi stack init production` in both `infrastructure/foundation` and `infrastructure/services`.
+2. Foundation: `pulumi config set accountId <id>` per stack, then `pulumi up -s staging` and `pulumi up -s production`. Copy each `d1DatabaseId` output into the matching `env` block of `wrangler.jsonc`.
+3. Workers AI: send one request with the prompt `agree` to `@cf/meta/llama-3.2-11b-vision-instruct` to accept Meta's license for the account.
+4. Google Cloud: create a project, enable the Drive API, and configure the OAuth consent screen (External; add both accounts as test users while building, then Publish app to In production before daily use). Use scopes `openid`, `email`, `profile`, `drive.file`.
+5. Create two OAuth Web clients (dev, prod) with redirect URIs `http://localhost:8787/auth/google/callback`, `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` and the production origin's `/auth/google/callback`.
+6. Services: set `appOrigin` and the secrets for each stack.
+7. GitHub repo secrets: `CLOUDFLARE_API_TOKEN` (Account: Workers Scripts, D1, Queues edit; Zone: Workers Routes edit if a custom domain is used), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`.
 
 **CI/CD (`.github/workflows/deploy.yml`)**
 
@@ -364,27 +374,39 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r test
-      - run: pnpm --filter web build
       - name: Set env
-        run: echo "CF_ENV=$([[ $GITHUB_REF == refs/tags/* ]] && echo prod || echo dev)" >> $GITHUB_ENV
+        run: echo "STACK=$([[ $GITHUB_REF == refs/tags/* ]] && echo production || echo staging)" >> $GITHUB_ENV
+      - name: Build
+        run: |
+          pnpm --filter web build
+          pnpm --filter worker bundle
       - name: Migrate D1
         working-directory: worker
-        run: npx wrangler d1 migrations apply $([[ $CF_ENV == dev ]] && echo expense-dev --env dev || echo expense-prod) --remote
-        env: { CLOUDFLARE_API_TOKEN: '${{ secrets.CLOUDFLARE_API_TOKEN }}', CLOUDFLARE_ACCOUNT_ID: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}' }
-      - name: Deploy
-        working-directory: worker
-        run: npx wrangler deploy $([[ $CF_ENV == dev ]] && echo --env dev)
-        env: { CLOUDFLARE_API_TOKEN: '${{ secrets.CLOUDFLARE_API_TOKEN }}', CLOUDFLARE_ACCOUNT_ID: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}' }
+        run: npx wrangler d1 migrations apply expense-$STACK --env $STACK --remote
+      - name: Deploy services
+        uses: pulumi/actions@v6
+        with:
+          command: up
+          stack-name: ${{ env.STACK }}
+          work-dir: infrastructure/services
 ```
+
+`foundation` is not run by CI. Change it deliberately with `pulumi preview` then `pulumi up`; D1 is `protect`ed so it can't be deleted by accident.
 
 **Migration rule:** additive only (new tables, nullable columns) in the same release as the code, because the migration runs before the new code is live. Drop or rename only in a later release. Use `wrangler d1 time-travel` to restore D1 to a point in time if a migration goes wrong.
 
-**Rollback:** `wrangler rollback [--env dev]` returns to the previous Worker version within seconds. The D1 schema stays forward-compatible thanks to the additive rule.
+**Rollback:** re-run the workflow for the previous tag (or revert on `main` for staging); Pulumi redeploys that build. In an emergency, `wrangler rollback --name expense-tracker-<env>` reverts within seconds, then the next `pulumi up` restores Pulumi as the source of truth. The D1 schema stays forward-compatible thanks to the additive rule.
 
 ## Risks, open questions & milestones
 

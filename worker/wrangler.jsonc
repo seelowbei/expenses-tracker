@@ -1,0 +1,50 @@
+// Wrangler config: local dev (Miniflare), bundling and remote D1 migrations only.
+// Deployed bindings and secrets are owned by infrastructure/services (Pulumi).
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "expense-tracker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01", // keep in sync with infrastructure/services config
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "../web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/auth/*"]
+  },
+  "ai": { "binding": "AI" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "expense-local", "database_id": "local", "migrations_dir": "migrations" }
+  ],
+  "queues": {
+    "producers": [{ "binding": "RECEIPT_QUEUE", "queue": "receipts-local" }],
+    "consumers": [
+      { "queue": "receipts-local", "max_batch_size": 1, "max_retries": 3, "dead_letter_queue": "receipts-local-dlq" }
+    ]
+  },
+  "vars": { "APP_ORIGIN": "http://localhost:8787", "DEFAULT_CURRENCY": "SGD" },
+  "observability": { "enabled": true },
+  "env": {
+    // Only so `wrangler d1 migrations apply expense-<env> --env <env> --remote` can find each database.
+    // Ids come from `pulumi stack output d1DatabaseId -s <env>` in infrastructure/foundation.
+    "staging": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "expense-staging",
+          "database_id": "097313e1-5042-4f44-9762-e8f11db66fb6",
+          "migrations_dir": "migrations"
+        }
+      ]
+    },
+    "production": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "expense-production",
+          "database_id": "70e70198-8fef-493f-8061-8d9a41b18cd5",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
+}
