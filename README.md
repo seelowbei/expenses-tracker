@@ -4,7 +4,7 @@ Personal expense tracker for two users. Sign in with Google, upload a receipt (p
 
 The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
-> Full design: [`Expense Tracker — Technical Spec.md`](./Expense%20Tracker%20—%20Technical%20Spec.md)
+> Full design: [`documents/Expense Tracker — Technical Spec.md`](./documents/Expense%20Tracker%20—%20Technical%20Spec.md)
 
 ## Status
 
@@ -42,6 +42,7 @@ Browser (SPA) ──► Worker fetch ──► Google Drive (save file)
 ## Repo layout (planned)
 
 ```text
+documents/              Technical spec and other project docs
 web/                    Vite + React SPA -> web/dist
 worker/
   src/index.ts          Hono app: fetch + queue handlers

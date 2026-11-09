@@ -6,13 +6,14 @@ Instructions for coding agents (Codex, Claude Code, others). This file is the so
 
 Receipt-to-ledger expense tracker for two users on the **Cloudflare Workers Free plan**. One Worker serves a static React SPA and a Hono API (`fetch` handler) and runs AI extraction (`queue` handler). D1 stores all structured data; receipt files live in each user's Google Drive.
 
-The design is in `Expense Tracker — Technical Spec.md`. Read the relevant section before implementing anything; it defines the schema, flows, API, prompt, Zod schema and failure handling. If the code and spec disagree, stop and ask rather than silently picking one.
+The design is in `documents/Expense Tracker — Technical Spec.md`. Read the relevant section before implementing anything; it defines the schema, flows, API, prompt, Zod schema and failure handling. If the code and spec disagree, stop and ask rather than silently picking one.
 
 **Status:** pre-code. Current milestone is **M1 (extraction spike)**. Do not build M2+ features unless asked.
 
 ## Layout
 
 ```text
+documents/           Technical spec and other project docs
 web/                 Vite + React + TS SPA (TanStack Query, Tailwind) -> web/dist
 worker/src/index.ts  Hono app; exports { fetch, queue }
 worker/src/auth/     arctic Google OIDC + PKCE, sessions, AES-GCM token crypto
