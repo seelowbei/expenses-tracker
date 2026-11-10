@@ -4,6 +4,7 @@ Nov 9, 2026 · @Celine Low
 
 **Revisions**
 
+- Nov 10, 2026 (M2): OAuth uses `oauth4webapi` instead of `arctic`, which npm marks as no longer supported; logout deletes all of the user's sessions; the resumable upload for files over 5 MB is deferred to M5 (until then `413 file_too_large`); the app never deletes, trashes or overwrites Drive files, so deleting a ledger entry keeps its file (was: optional `files.delete`).
 - Nov 10, 2026: capture the transaction time when the receipt prints one (`txn_time`); record Workers AI usage (tokens, estimated neurons) per model call in a new `ai_usage` table; extraction prompt and post-validation updated from the first M1 runs.
 
 ## Overview & scope
@@ -47,7 +48,7 @@ The stack is a static SPA with a Hono API on a single Worker. It avoids server r
 | --- | --- | --- |
 | Frontend | Vite + React + TypeScript, TanStack Query, Tailwind | Served as static assets, which are free and unlimited |
 | API | Hono on Cloudflare Workers | Small, typed router built for Workers |
-| Auth | `arctic` (Google OAuth/OIDC) + own session table | Small library with no framework lock-in; full control over refresh tokens |
+| Auth | `oauth4webapi` (Google OAuth/OIDC, PKCE) + own session table | Small, dependency-free, Web Crypto only; full control over refresh tokens |
 | Database | Cloudflare D1 + Drizzle ORM | SQLite with typed queries; migrations via Wrangler |
 | Async jobs | Cloudflare Queues (producer + consumer in the same Worker) | Decouples slow AI calls from the upload request |
 | AI | Workers AI: `@cf/meta/llama-3.2-11b-vision-instruct` for images; `env.AI.toMarkdown()` + a text LLM for PDFs | Free 10,000 neurons/day; no external API key |
@@ -194,7 +195,7 @@ Uploads return as soon as the file is saved to Drive and queued. Extraction then
 
 1. The ledger page calls `GET /api/ledger?from&to&category`, grouped by category with monthly totals computed in SQL and grouped by currency (GROUP BY category\_id, month, currency); amounts in different currencies are never summed together.
 2. Entries in `needs_review` are highlighted at the top. The user edits fields or changes the category, and the entry's `source` becomes `ai_edited`. Receipts in `needs_review` with no entry yet (invalid output) show the pre-filled form; saving creates the entry.
-3. Deleting an entry asks whether to delete the Drive file too (`files.delete`; allowed under `drive.file` because the app created the file).
+3. Deleting an entry removes it from D1 only. The Drive file stays: the app never deletes, trashes or overwrites Drive files (see "Security & privacy"), and the user can remove it in Drive themselves.
 
 ## Extraction agent
 
@@ -293,7 +294,7 @@ All `/api/*` routes need a valid session cookie and are scoped to the session's 
 | --- | --- | --- | --- |
 | GET | `/auth/google` | Start OAuth | 302 to Google |
 | GET | `/auth/google/callback` | Finish OAuth, create session | 302 to `/` |
-| POST | `/auth/logout` | Delete session | 204 |
+| POST | `/auth/logout` | Delete all of the user's sessions | 204 |
 | GET | `/api/me` | Profile, Drive status, default currency | 200 |
 | POST | `/api/receipts` | Multipart upload (≤ 5 MB) | 202 receipt / 409 duplicate |
 | POST | `/api/receipts/resumable` | Start Drive resumable upload (> 5 MB) | 200 `{ receiptId, uploadUrl }` |
@@ -302,7 +303,7 @@ All `/api/*` routes need a valid session cookie and are scoped to the session's 
 | POST | `/api/receipts/:id/retry` | Re-enqueue a failed receipt | 202 |
 | GET | `/api/ledger?from=&to=&category=` | Entries + totals by category/month | 200 |
 | PATCH | `/api/ledger/:id` | Edit fields / category | 200 |
-| DELETE | `/api/ledger/:id?deleteFile=` | Delete entry, optionally the Drive file | 204 |
+| DELETE | `/api/ledger/:id` | Delete entry (the Drive file is kept) | 204 |
 | GET / POST | `/api/categories` | List / add categories | 200 / 201 |
 
 The UI polls `GET /api/receipts?status=queued,processing` every 3 s while anything is pending, and stops when nothing is.
@@ -314,6 +315,7 @@ Ledger entries carry `txn_time` (`"HH:MM"` or `null`). `GET /api/ledger` orders 
 The two highest-value secrets are the users' Google refresh tokens. They are encrypted at rest and never leave the Worker.
 
 - **Scopes:** only `openid email profile drive.file`. `drive.file` is non-sensitive, so the app can only see files it created. Never request the full `drive` scope.
+- **Drive is write-once:** the app only creates the folder and uploads new files. It never deletes, trashes or overwrites Drive files. No Google scope enforces this (`drive.file` allows deleting files the app created), so it is a code rule, checked by `worker/test/drive-no-delete.test.ts`. Drive keeps trashed files for 30 days, and D1 holds the ledger either way.
 - **Refresh tokens:** AES-GCM with a random 12-byte IV per token. The key is a 32-byte `TOKEN_ENC_KEY` Worker secret, and the stored value is `v1:<iv>:<ciphertext>` so the key can be rotated later.
 - **Access tokens:** cached in memory only for their lifetime, never written to D1 or logs.
 - **Sessions:** opaque random token in an `HttpOnly; Secure; SameSite=Lax` cookie, stored only as its SHA-256 hash. Logout and `invalid_grant` delete all of the user's sessions.

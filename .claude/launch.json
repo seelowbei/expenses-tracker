@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "worker-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "worker", "dev"],
+      "port": 8787
+    }
+  ]
+}
