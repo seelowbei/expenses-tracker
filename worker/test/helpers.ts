@@ -71,6 +71,51 @@ export function makeApp(fake = fakeGoogle()) {
 
 export const db = () => getDb(env.DB);
 
+/** Runs app requests against the test env with some bindings replaced. */
+export function requestWithEnv(app: ReturnType<typeof makeApp>["app"], overrides: Partial<typeof env>) {
+  const patched = { ...env, ...overrides };
+  return (path: string, init: RequestInit = {}) => app.request(path, init, patched);
+}
+
+const RUN_METHODS = new Set<PropertyKey>(["first", "run", "all", "raw"]);
+
+/** Delegates to the real object, keeping `this` bound for native D1 methods. */
+function passThrough<T extends object>(target: T, prop: PropertyKey) {
+  const value: unknown = Reflect.get(target, prop);
+  return typeof value === "function" ? value.bind(target) : value;
+}
+
+function hookedStatement(stmt: D1PreparedStatement, before: () => Promise<void>): D1PreparedStatement {
+  return new Proxy(stmt, {
+    get(target, prop) {
+      if (prop === "bind") return (...values: unknown[]) => hookedStatement(target.bind(...values), before);
+      if (RUN_METHODS.has(prop)) {
+        const run = passThrough(target, prop) as (...args: unknown[]) => Promise<unknown>;
+        return async (...args: unknown[]) => {
+          await before();
+          return run(...args);
+        };
+      }
+      return passThrough(target, prop);
+    },
+  });
+}
+
+/** The test D1 database, but `before` runs just before any statement whose SQL matches `sql` executes. */
+export function d1WithHook(sql: RegExp, before: () => Promise<void>): D1Database {
+  return new Proxy(env.DB, {
+    get(target, prop) {
+      if (prop === "prepare") {
+        return (query: string) => {
+          const stmt = target.prepare(query);
+          return sql.test(query) ? hookedStatement(stmt, before) : stmt;
+        };
+      }
+      return passThrough(target, prop);
+    },
+  });
+}
+
 export async function seedUser(opts: { email?: string; refreshToken?: string | null; driveFolderId?: string | null; driveStatus?: "connected" | "disconnected" } = {}) {
   const id = crypto.randomUUID();
   const refreshToken = opts.refreshToken === undefined ? `rt-${id}` : opts.refreshToken;

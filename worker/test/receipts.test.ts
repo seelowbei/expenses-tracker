@@ -6,7 +6,7 @@ import { sha256Hex } from "../src/lib/encoding";
 import { validateSession } from "../src/auth/session";
 import { receipts, users } from "../src/db/schema";
 import { cacheAccessToken, clearAccessTokenCache } from "../src/drive/access";
-import { db, FOLDER_URL, fakeGoogle, json, makeApp, ORIGIN, seedUser, TOKEN_URL, UPLOAD_URL } from "./helpers";
+import { d1WithHook, db, FOLDER_URL, fakeGoogle, json, makeApp, ORIGIN, requestWithEnv, seedUser, TOKEN_URL, UPLOAD_URL } from "./helpers";
 
 beforeEach(() => clearAccessTokenCache());
 
@@ -248,6 +248,82 @@ describe("POST /api/receipts", () => {
     google.set(UPLOAD_URL, () => new Response("", { status: 401 }));
     expect((await upload(request, b.cookie, unique(JPEG))).status).toBe(401);
     expect((await db().select().from(users).where(eq(users.id, b.id)).get())?.driveStatus).toBe("disconnected");
+  });
+
+  it("returns 409 with the winner's id when an identical upload inserts first", async () => {
+    const { cookie, id } = await seedUser();
+    const google = fakeGoogle();
+    const { app } = makeApp(google);
+    const bytes = unique(JPEG);
+    const winnerId = crypto.randomUUID();
+    let raced = false;
+    // The identical request's row lands between our duplicate check and our insert.
+    const DB = d1WithHook(/^insert into "receipts"/i, async () => {
+      if (raced) return;
+      raced = true;
+      await db()
+        .insert(receipts)
+        .values({ id: winnerId, userId: id, mimeType: "image/jpeg", sizeBytes: bytes.length, sha256: await sha256Hex(bytes), status: "uploading", createdAt: new Date().toISOString() });
+    });
+
+    const res = await upload(requestWithEnv(app, { DB }), cookie, bytes);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "duplicate_receipt", receiptId: winnerId });
+    expect(google.calls).toHaveLength(0);
+  });
+
+  it("returns 500 for a D1 error on insert instead of calling it a duplicate", async () => {
+    const { cookie, id } = await seedUser();
+    const google = fakeGoogle();
+    const { app } = makeApp(google);
+    const DB = d1WithHook(/^insert into "receipts"/i, async () => {
+      throw new Error("D1_ERROR: simulated");
+    });
+
+    const res = await upload(requestWithEnv(app, { DB }), cookie, unique(JPEG));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "internal_error" });
+    expect(google.calls).toHaveLength(0);
+    expect(await db().select().from(receipts).where(eq(receipts.userId, id))).toHaveLength(0);
+  });
+
+  it("fails the receipt but keeps Drive connected on other refresh errors", async () => {
+    const { cookie, id, token } = await seedUser();
+    const google = fakeGoogle({ [TOKEN_URL]: () => json({ error: "invalid_client", error_description: "The OAuth client was not found." }, 401) });
+    const { request } = makeApp(google);
+
+    const rejected = await upload(request, cookie, unique(JPEG));
+    expect(rejected.status).toBe(502);
+    expect(((await rejected.json()) as { error: string }).error).toBe("drive_error");
+
+    google.set(TOKEN_URL, () => {
+      throw new TypeError("network connection lost");
+    });
+    const offline = await upload(request, cookie, unique(JPEG));
+    expect(offline.status).toBe(502);
+    expect(((await offline.json()) as { error: string }).error).toBe("drive_error");
+
+    expect(google.callsTo(UPLOAD_URL)).toHaveLength(0);
+    const rows = await db().select().from(receipts).where(eq(receipts.userId, id));
+    expect(rows.map((r) => [r.status, r.error])).toEqual([
+      ["failed", "drive_error"],
+      ["failed", "drive_error"],
+    ]);
+    expect((await db().select().from(users).where(eq(users.id, id)).get())?.driveStatus).toBe("connected");
+    expect(await validateSession(db(), token)).not.toBeNull();
+  });
+
+  it("keeps Drive connected when TOKEN_ENC_KEY is misconfigured, not just different", async () => {
+    const { cookie, id, token } = await seedUser();
+    const google = fakeGoogle();
+    const { app } = makeApp(google);
+    // Valid base64 but 9 bytes: a config error that must not disconnect every user.
+    const res = await upload(requestWithEnv(app, { TOKEN_ENC_KEY: btoa("too-short") }), cookie, unique(JPEG));
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { error: string }).error).toBe("drive_error");
+    expect(google.calls).toHaveLength(0);
+    expect((await db().select().from(users).where(eq(users.id, id)).get())?.driveStatus).toBe("connected");
+    expect(await validateSession(db(), token)).not.toBeNull();
   });
 
   it("requires a session and our Origin", async () => {

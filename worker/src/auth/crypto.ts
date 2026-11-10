@@ -59,8 +59,10 @@ export async function decryptToken(secretB64: string, stored: string): Promise<s
     throw new TokenCryptoError("invalid base64");
   }
   if (iv.length !== 12) throw new TokenCryptoError("invalid iv");
+  // Outside the try: a malformed TOKEN_ENC_KEY is a config error, not an unreadable token.
+  const key = await aesKey(secretB64);
   try {
-    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await aesKey(secretB64), ct);
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
     return new TextDecoder().decode(pt);
   } catch {
     throw new TokenCryptoError("decryption failed");
