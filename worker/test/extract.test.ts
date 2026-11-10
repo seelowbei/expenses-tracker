@@ -50,7 +50,7 @@ describe("renderSystemPrompt", () => {
   it("fills every variable and asks for the time", () => {
     const p = renderSystemPrompt(ctx);
     expect(p).not.toMatch(/\{\{/);
-    expect(p).toContain("default locale: en-SG");
+    expect(p).toContain("date copied exactly as printed");
     expect(p).toContain("food-dining, groceries");
     expect(p).toContain("use SGD");
     expect(p).toContain('6:19 PM -> "18:19"');
@@ -110,7 +110,7 @@ describe("extractReceipt", () => {
     const msgs = calls[1]!.messages as { role: string; content: unknown }[];
     expect(msgs.at(-2)!.role).toBe("assistant");
     // Plain-language hint, not the raw regex from the schema.
-    expect(String(msgs.at(-1)!.content)).toContain('txn_date must be "YYYY-MM-DD"');
+    expect(String(msgs.at(-1)!.content)).toContain("txn_date must be the transaction date copied exactly as printed");
     expect(String(msgs.at(-1)!.content)).not.toContain("pattern");
   });
 

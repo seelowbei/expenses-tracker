@@ -8,6 +8,12 @@ describe("dev routes", () => {
     expect(res.status).toBe(404);
   });
 
+  it("return 400 when the body is not multipart", async () => {
+    const res = await app.request("/api/dev/extract", { method: "POST" }, { DEV_ROUTES: "true" });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "missing_file" });
+  });
+
   it("reject unsupported file types", async () => {
     const form = new FormData();
     form.append("file", new File([new Uint8Array([0x47, 0x49, 0x46, 0x38])], "x.gif"));

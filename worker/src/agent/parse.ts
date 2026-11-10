@@ -26,21 +26,58 @@ export function extractJsonObject(text: string): string | null {
   return null;
 }
 
-const pad2 = (n: string) => n.padStart(2, "0");
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const PRINTED_TIME = /\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s*m\.?)?/gi;
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const fullYear = (y: string) => (y.length === 2 ? 2000 + Number(y) : y.length === 4 ? Number(y) : NaN);
+
+function ymd(year: number, month: number, day: number): string | null {
+  if (!Number.isInteger(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
 
 /**
- * Converts printed dates to YYYY-MM-DD. Day-first per the spec ("prefer DD/MM"), unless the
- * second number can only be a day (e.g. 11/25/2026). Leaves anything else for the schema to reject.
+ * Converts a date copied as printed to YYYY-MM-DD; the model only copies, because it reorders
+ * day/month unreliably. All-number dates are day-first per the spec ("prefer DD/MM") unless the
+ * second number can only be a day (11/25/2026), or year-first when they start with 4 digits.
+ * Month names ("Sep-03-2026", "October 27, 2026", "12 Oct 26") set the month; a 2-digit year
+ * is 20YY. Compact stamps are DDMMYY, YYYYMMDD or DDMMYYYY. Weekdays and times are ignored. Anything else is returned as is for the schema to reject.
  */
 export function normalizeDate(raw: string): string {
   const s = raw.trim();
-  const ymd = s.match(/^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})$/);
-  if (ymd) return `${ymd[1]}-${pad2(ymd[2]!)}-${pad2(ymd[3]!)}`;
-  const dmy = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
-  if (!dmy) return s;
-  const [, a, b, year] = dmy as unknown as [string, string, string, string];
-  const [day, month] = Number(b) > 12 && Number(a) <= 12 ? [b, a] : [a, b];
-  return `${year}-${pad2(month)}-${pad2(day)}`;
+  const tokens = s.replace(PRINTED_TIME, " ").toLowerCase().match(/[a-z]+|\d+/g) ?? [];
+  const nums = tokens.filter((t) => /^\d+$/.test(t));
+  const monthIdx = tokens
+    .filter((t) => /^[a-z]{3,}$/.test(t))
+    .map((t) => MONTHS.indexOf(t.slice(0, 3)))
+    .find((i) => i !== -1);
+
+  // A separated all-number date anywhere wins, so trailing POS codes ("07/07/26 8889 SC021") or
+  // words that look like months ("Marina") don't matter.
+  const separated = s.match(/(?<!\d)(\d{1,4})[/.-](\d{1,2})[/.-](\d{2,4})(?!\d)/);
+  const allNumbers = separated ? separated.slice(1, 4) : monthIdx === undefined && nums.length === 3 ? nums : null;
+  let out: string | null = null;
+  if (allNumbers) {
+    const [a, b, c] = allNumbers as [string, string, string];
+    if (a.length === 4) {
+      out = ymd(Number(a), Number(b), Number(c));
+    } else {
+      const [day, month] = Number(b) > 12 && Number(a) <= 12 ? [b, a] : [a, b];
+      out = ymd(fullYear(c), Number(month), Number(day));
+    }
+  } else if (monthIdx !== undefined && nums.length === 2) {
+    const yearPos = nums.findIndex((n) => n.length === 4);
+    const [day, year] = yearPos === -1 ? [nums[0]!, nums[1]!] : [nums[1 - yearPos]!, nums[yearPos]!];
+    out = ymd(fullYear(year), monthIdx + 1, Number(day));
+  } else if (monthIdx === undefined && nums.length === 1 && (nums[0]!.length === 6 || nums[0]!.length === 8)) {
+    // Compact POS stamps: DDMMYY ("070726"), YYYYMMDD ("20260707") or DDMMYYYY ("07072026").
+    const n = nums[0]!;
+    const ymdFirst = n.length === 8 && /^(19|20)/.test(n) && Number(n.slice(4, 6)) <= 12;
+    out = ymdFirst
+      ? ymd(Number(n.slice(0, 4)), Number(n.slice(4, 6)), Number(n.slice(6)))
+      : ymd(fullYear(n.slice(4)), Number(n.slice(2, 4)), Number(n.slice(0, 2)));
+  }
+  return out ?? s;
 }
 
 /**
@@ -64,16 +101,37 @@ export function normalizeTime(raw: unknown): string | null {
   return `${String(hour).padStart(2, "0")}:${m[2]}`;
 }
 
-const NUMERIC = /^-?\d+(\.\d+)?$/;
+const PAYMENT_METHODS = ["cash", "card", "ewallet", "bank_transfer", "other"] as const;
+type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+const PAYMENT_KEYWORDS: [RegExp, PaymentMethod][] = [
+  [/apple\s*pay|google\s*pay|samsung\s*pay|grab\s*pay|paylah|shopee\s*pay|wallet/, "ewallet"],
+  [/visa|master|amex|american express|credit|debit|nets|card|unionpay|jcb/, "card"],
+  [/paynow|transfer|giro|bank/, "bank_transfer"],
+  [/cash/, "cash"],
+];
+
+/**
+ * Maps a printed payment method ("Apple Pay", "VISA2") to the enum. Any other string -> "other":
+ * payment method is not scored and must never fail an otherwise good extraction.
+ */
+export function normalizePaymentMethod(raw: unknown): PaymentMethod | null {
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  const s = raw.trim().toLowerCase();
+  if ((PAYMENT_METHODS as readonly string[]).includes(s)) return s as PaymentMethod;
+  return PAYMENT_KEYWORDS.find(([re]) => re.test(s))?.[1] ?? "other";
+}
+
+const NUMERIC =/^-?\d+(\.\d+)?$/;
 const toNumber = (v: unknown) => (typeof v === "string" && NUMERIC.test(v.trim()) ? Number(v.trim()) : v);
 
 // Mechanical clean-up only: fill omitted nullable keys, coerce numeric strings, upper-case currency,
-// reformat printed dates (spec's day-first rule) and times (24-hour; unreadable -> null).
+// reformat printed dates (spec's day-first rule) and times (24-hour; unreadable -> null),
+// map payment methods to the enum (unknown -> "other").
 function normalize(raw: unknown): unknown {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
   const o: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
   o.tax = o.tax === undefined ? null : toNumber(o.tax);
-  o.payment_method ??= null;
+  o.payment_method = normalizePaymentMethod(o.payment_method);
   o.line_items ??= [];
   o.total = toNumber(o.total);
   o.confidence = toNumber(o.confidence);
@@ -101,10 +159,17 @@ export function parseExtraction(reply: unknown): ParseResult {
       return { ok: false, errors: [`Invalid JSON: ${(e as Error).message}`] };
     }
   }
-  const result = Extraction.safeParse(normalize(candidate));
+  const normalized = normalize(candidate);
+  const result = Extraction.safeParse(normalized);
   if (result.success) return { ok: true, value: result.data };
+  const rawDate = (normalized as { txn_date?: unknown } | null)?.txn_date;
   return {
     ok: false,
-    errors: result.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
+    errors: result.error.issues.map((i) => {
+      const path = i.path.join(".") || "(root)";
+      // Show the unreadable date (capped) so eval runs reveal which printed format to support.
+      if (path === "txn_date" && typeof rawDate === "string") return `txn_date: unreadable date ${JSON.stringify(rawDate.slice(0, 32))}`;
+      return `${path}: ${i.message}`;
+    }),
   };
 }

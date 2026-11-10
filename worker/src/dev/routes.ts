@@ -32,7 +32,12 @@ devRoutes.post("/agree", async (c) => {
 
 /** Multipart `file` (JPEG/PNG/PDF). Optional `imageMode` = data_url | bytes. */
 devRoutes.post("/extract", async (c) => {
-  const form = await c.req.formData();
+  let form: FormData;
+  try {
+    form = await c.req.formData();
+  } catch {
+    return c.json({ error: "missing_file" }, 400);
+  }
   const file = form.get("file");
   if (!(file instanceof File)) return c.json({ error: "missing_file" }, 400);
   if (file.size > MAX_UPLOAD_BYTES) return c.json({ error: "file_too_large" }, 413);

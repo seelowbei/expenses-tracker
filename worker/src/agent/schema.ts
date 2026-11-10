@@ -21,7 +21,7 @@ export type Extraction = z.infer<typeof Extraction>;
 // Shown to the model in the prompt. Keep in step with `Extraction`.
 export const EXTRACTION_SHAPE = `{
   "merchant": string,                 // 1-120 chars
-  "txn_date": "YYYY-MM-DD",
+  "txn_date": string,                 // transaction date exactly as printed
   "txn_time": "HH:MM" | null,         // 24-hour transaction time as printed
   "currency": "ISO 4217 code",
   "total": number,

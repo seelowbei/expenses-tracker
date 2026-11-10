@@ -35,10 +35,39 @@ describe("normalizeDate", () => {
     expect(normalizeDate("11/25/2026")).toBe("2026-11-25");
   });
 
-  it("pads year-first dates and leaves ISO and unknown formats alone", () => {
+  it("pads year-first dates and leaves ISO alone", () => {
     expect(normalizeDate("2026/11/9")).toBe("2026-11-09");
     expect(normalizeDate("2026-11-09")).toBe("2026-11-09");
-    expect(normalizeDate("9 Nov 2026")).toBe("9 Nov 2026");
+  });
+
+  it("reads month names in any order", () => {
+    expect(normalizeDate("9 Nov 2026")).toBe("2026-11-09");
+    expect(normalizeDate("Sep-03-2026")).toBe("2026-09-03");
+    expect(normalizeDate("October 27, 2026")).toBe("2026-10-27");
+    expect(normalizeDate("12 October 2026")).toBe("2026-10-12");
+    expect(normalizeDate("Oct. 11, 25")).toBe("2025-10-11");
+  });
+
+  it("treats two-digit years as 20YY and ignores weekdays and times", () => {
+    expect(normalizeDate("27/09/25 01:14 pm")).toBe("2025-09-27");
+    expect(normalizeDate("09/07/2026 (THU)")).toBe("2026-07-09");
+    expect(normalizeDate("Sep-03-2026 06:08PM")).toBe("2026-09-03");
+    expect(normalizeDate("Date : 8/7/2026 8:02:04 PM")).toBe("2026-07-08");
+    expect(normalizeDate("07/07/26 19:31:55 8889 SC021")).toBe("2026-07-07");
+    expect(normalizeDate("Marina Sq 09/07/2026")).toBe("2026-07-09");
+  });
+
+  it("reads compact POS date stamps", () => {
+    expect(normalizeDate("070726")).toBe("2026-07-07");
+    expect(normalizeDate("20260707")).toBe("2026-07-07");
+    expect(normalizeDate("07072026")).toBe("2026-07-07");
+  });
+
+  it("leaves unreadable dates for the schema to reject", () => {
+    expect(normalizeDate("123456789")).toBe("123456789");
+    expect(normalizeDate("071326")).toBe("071326");
+    expect(normalizeDate("32/13/2026")).toBe("32/13/2026");
+    expect(normalizeDate("yesterday")).toBe("yesterday");
   });
 });
 
@@ -91,13 +120,29 @@ describe("parseExtraction", () => {
     expect(pm.ok && pm.value.txn_time).toBe("18:19");
   });
 
+  it("maps printed payment methods to the enum and never fails on an unknown one", () => {
+    const pm = (v: unknown) => {
+      const r = parseExtraction(JSON.stringify({ ...valid, payment_method: v }));
+      return r.ok ? r.value.payment_method : "FAILED";
+    };
+    expect(pm("Apple Pay")).toBe("ewallet");
+    expect(pm("VISA2")).toBe("card");
+    expect(pm("NETS")).toBe("card");
+    expect(pm("PayNow")).toBe("bank_transfer");
+    expect(pm("CASH")).toBe("cash");
+    expect(pm("ewallet")).toBe("ewallet");
+    expect(pm("voucher")).toBe("other");
+    expect(pm("")).toBeNull();
+    expect(pm(42)).toBeNull();
+  });
+
   it("converts printed DD/MM/YYYY dates before validation", () => {
     const r = parseExtraction(JSON.stringify({ ...valid, txn_date: "09/11/2026" }));
     expect(r.ok && r.value.txn_date).toBe("2026-11-09");
   });
 
   it("reports schema errors with paths", () => {
-    const r = parseExtraction(JSON.stringify({ ...valid, txn_date: "9 Nov 2026", total: -1 }));
+    const r = parseExtraction(JSON.stringify({ ...valid, txn_date: "yesterday", total: -1 }));
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.errors.some((e) => e.startsWith("txn_date"))).toBe(true);
