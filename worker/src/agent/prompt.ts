@@ -13,7 +13,7 @@ Rules:
 - total = final amount paid incl. tax and tips, after discounts and vouchers.
 - total_text = the line you read total from, copied exactly as printed: its label and amount. Not printed -> null.
 - tax = the tax amount printed (also when prices are tax-inclusive, e.g. "Inclusive of 9% GST ($0.37)" -> 0.37). Fees, surcharges, service charges and discounts are not tax. No tax amount printed -> null, not 0. Ignore struck-through prices.
-- date: the transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. Not a return, expiry, validity or print date.
+- date: the one transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. If several dates are printed, use the payment, transaction, order, invoice or issue date. Never a travel, check-in/check-out, booking period, return, expiry, validity or print date, and never a date range.
 - time: HH:MM, 24-hour, the transaction time printed on the receipt (6:19 PM -> "18:19", 01:14 pm -> "13:14", 9:05 AM -> "09:05"). Not printed -> null. Never use a print, opening-hours or validity time.
 - currency: ISO 4217. If no symbol/code, use {{default_currency}}.
 - line_items: one per line; amount = the line total actually charged (after quantity and discounts), not the unit price.
@@ -51,7 +51,7 @@ RECEIPT>>>`;
 // Plain-language fixes per field; the raw Zod messages (e.g. a regex) don't steer the model.
 const FIELD_HINTS: Record<string, string> = {
   merchant: 'merchant must be the store or brand name as a non-empty string, e.g. "Kopitiam".',
-  txn_date: "txn_date must be the transaction date copied exactly as printed, including day, month and year.",
+  txn_date: "txn_date must be the one payment or transaction date copied exactly as printed, including day, month and year; not a travel date or a date range.",
   txn_time: 'txn_time must be "HH:MM" 24-hour (e.g. 6:19 PM -> "18:19") or null.',
   currency: 'currency must be a 3-letter ISO 4217 code, e.g. "SGD".',
   total: "total must be a number without currency symbols, e.g. 4.50.",

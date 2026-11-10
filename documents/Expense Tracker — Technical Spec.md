@@ -213,7 +213,7 @@ Rules:
 - total = final amount paid incl. tax and tips, after discounts and vouchers.
 - total_text = the line you read total from, copied exactly as printed: its label and amount. Not printed -> null.
 - tax = the tax amount printed (also when prices are tax-inclusive, e.g. "Inclusive of 9% GST ($0.37)" -> 0.37). Fees, surcharges, service charges and discounts are not tax. No tax amount printed -> null, not 0. Ignore struck-through prices.
-- date: the transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. Not a return, expiry, validity or print date.
+- date: the one transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. If several dates are printed, use the payment, transaction, order, invoice or issue date. Never a travel, check-in/check-out, booking period, return, expiry, validity or print date, and never a date range.
 - time: HH:MM, 24-hour, the transaction time printed on the receipt (6:19 PM -> "18:19", 01:14 pm -> "13:14", 9:05 AM -> "09:05"). Not printed -> null. Never use a print, opening-hours or validity time.
 - currency: ISO 4217. If no symbol/code, use {{default_currency}}.
 - line_items: one per line; amount = the line total actually charged (after quantity and discounts), not the unit price.
@@ -221,7 +221,7 @@ Rules:
 - confidence: 0..1, your certainty that merchant, date and total are all correct.
 ```
 
-The repair prompt lists one plain-language fix per failing field (e.g. `txn_date must be the transaction date copied exactly as printed, including day, month and year.`) rather than raw Zod messages, which the model ignored.
+The repair prompt lists one plain-language fix per failing field (e.g. `txn_date must be the one payment or transaction date copied exactly as printed, including day, month and year; not a travel date or a date range.`) rather than raw Zod messages, which the model ignored.
 
 **Output schema (Zod)**
 
@@ -255,7 +255,8 @@ const Extraction = z.object({
 - `category_slug` must be in the user's list; otherwise map it to `other` and set `needs_review`.
 - `txn_date` no later than today + 1 day and no earlier than 10 years ago; otherwise `needs_review`.
 - If line items exist and their sum differs by more than 2% from both `total - tax` and `total` (tax-inclusive receipts, common with Singapore GST): `needs_review`. A null `tax` counts as 0.
-- `total_text` vs `total`: if the copied line contains money amounts and none equals `total`, `needs_review` (`total_mismatch`). Only amounts with decimals count, so receipt numbers and quantities are ignored, except for zero-decimal currencies (JPY). A line with no amount (table layouts print label and amount apart) or no line at all is not flagged.
+- `total_text` vs `total`: if the copied line contains money amounts and none equals `total`, `needs_review` (`total_mismatch`). Only amounts with decimals count, so receipt numbers and quantities are ignored, except for zero-decimal currencies (JPY). Amounts equal to `tax` or printed right after a GST/VAT/SST/tax label are ignored.
+- `total_text` with no amount: accepted if it has a total word (total, paid, amount, charge, due, balance, payable, 合計…), because table layouts print label and amount apart; otherwise, or when `total_text` is `null`, `needs_review` (`total_unverified`): the model could not point to the total line.
 - `total_text` labelled as a subtotal, "before discount/voucher/GST" or "excl.": `needs_review` (`total_is_subtotal`).
 - The extraction needed the repair call: `needs_review` (`repaired`).
 - `confidence < 0.7`: `needs_review`. In the M1 eval the model reported 1.0 for every receipt, including wrong ones, so in practice review comes from the code checks above, not from confidence.

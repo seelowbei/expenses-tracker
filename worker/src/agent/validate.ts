@@ -13,6 +13,7 @@ export type ReviewReason =
   | "invalid_currency"
   | "line_items_mismatch"
   | "total_mismatch"
+  | "total_unverified"
   | "total_is_subtotal"
   | "repaired";
 
@@ -39,6 +40,10 @@ const DAY_MS = 86_400_000;
 
 // Labels for amounts that are not the final amount paid.
 const NOT_FINAL_TOTAL = /sub[\s-]*total|before\s+(?:discount|voucher|promo|gst|tax)|\bexcl/i;
+// Words that mark a line as the one carrying the amount paid.
+// An amount printed right after a tax label ("(GST : $0.18)", "VAT 1.20") is the tax, not the total.
+const TAX_AMOUNT = /\b(?:gst|vat|sst|tax)\b[^\d\n]{0,6}\d[\d,]*(?:\.\d+)?/gi;
+const TOTAL_WORD = /total|paid|amount|charge|due|balance|payable|合計|合计|总计|小計|小计/i;
 
 /**
  * Money amounts printed in a line: "S$ 1,234.50" -> 1234.5; "12,50" (comma decimal) -> 12.5.
@@ -107,11 +112,22 @@ export function postValidate(
   }
 
   // The model reports confidence 1.0 almost always (M1 eval), so check the total against the line
-  // it says it was copied from. A line with a different amount and none equal to the total is a
-  // conflict; a line with no amount (table layouts print the label and amount apart) can't be checked.
-  if (x.total_text !== null) {
-    const printed = amountsIn(x.total_text, currencyExponent(currency) === 0);
-    if (printed.length > 0 && !printed.some((n) => Math.abs(n - x.total) < 0.005)) reasons.push("total_mismatch");
+  // it says it was copied from:
+  // - amounts in the line (other than the tax, by value or by label) and none equal to the total -> conflict;
+  // - no amount but a total word ("Total", "TOTAL(6Qt)") -> table layout, can't check, accept;
+  // - neither, or no line at all -> the model couldn't point to the total -> unverified.
+  if (x.total_text === null) {
+    reasons.push("total_unverified");
+  } else {
+    const same = (a: number, b: number) => Math.abs(a - b) < 0.005;
+    const printed = amountsIn(x.total_text.replace(TAX_AMOUNT, " "), currencyExponent(currency) === 0).filter(
+      (n) => x.tax === null || !same(n, x.tax) || same(n, x.total),
+    );
+    if (printed.length > 0) {
+      if (!printed.some((n) => same(n, x.total))) reasons.push("total_mismatch");
+    } else if (!TOTAL_WORD.test(x.total_text)) {
+      reasons.push("total_unverified");
+    }
     if (NOT_FINAL_TOTAL.test(x.total_text)) reasons.push("total_is_subtotal");
   }
   if (opts.repaired) reasons.push("repaired");

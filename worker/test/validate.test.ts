@@ -80,10 +80,24 @@ describe("postValidate", () => {
     expect(postValidate({ ...base, total: 1234.5, total_text: "Total S$ 1,234.50", line_items: [] }, slugs, today).reasons).toEqual([]);
   });
 
-  it("does not flag a copied line with no amount, or no line at all", () => {
-    for (const total_text of [null, "Total", "TOTAL(6Qt)", "Receipt #1414-8063"]) {
+  it("accepts a total line with a total word but no amount (table layouts)", () => {
+    for (const total_text of ["Total", "TOTAL(6Qt)", "Amount paid"]) {
       expect(postValidate({ ...base, total_text }, slugs, today).reasons).toEqual([]);
     }
+  });
+
+  it("flags a missing total line, or one with neither an amount nor a total word", () => {
+    for (const total_text of [null, "Receipt #1414-8063", "For Support, Visit: www.example.com/support"]) {
+      expect(postValidate({ ...base, total_text }, slugs, today).reasons).toEqual(["total_unverified"]);
+    }
+  });
+
+  it("ignores the tax amount when the copied line also shows it", () => {
+    expect(postValidate({ ...base, total_text: "TOTAL(GST INCLUSIVE) (GST : $0.90)" }, slugs, today).reasons).toEqual([]);
+    expect(postValidate({ ...base, total_text: "TOTAL $10.90 (GST $0.90)" }, slugs, today).reasons).toEqual([]);
+    // The model sometimes returns tax 0 while the line shows it: drop amounts right after a tax label.
+    expect(postValidate({ ...base, tax: 0, total_text: "TOTAL(GST INCLUSIVE) (GST : $0.18)" }, slugs, today).reasons).not.toContain("total_mismatch");
+    expect(postValidate({ ...base, total_text: "TOTAL(GST INCLUSIVE) $10.90" }, slugs, today).reasons).toEqual([]);
   });
 
   it("uses whole numbers as amounts for zero-decimal currencies", () => {

@@ -86,7 +86,7 @@ Run typecheck and the relevant tests before calling a change done.
 **Extraction agent**
 - One structured-output call per receipt plus at most one repair call. No tools, no conversation loop.
 - Receipt content is untrusted data. LLM output goes only through the Zod `Extraction` schema and the post-validation rules in `src/agent/`; the model can only choose from the user's existing category slugs.
-- `confidence >= 0.7` → `done`; otherwise `needs_review`. Post-validation failures also force `needs_review`: unknown slug, date out of range, line-item sum off by >2%, `total` not matching the amount in the copied `total_text`, a subtotal `total_text`, or a repair call. The model's confidence is ~always 1.0, so these code checks are what actually route receipts to review.
+- `confidence >= 0.7` → `done`; otherwise `needs_review`. Post-validation failures also force `needs_review`: unknown slug, date out of range, line-item sum off by >2%, `total` not matching the amount in the copied `total_text` (or no usable `total_text`), a subtotal `total_text`, or a repair call. The model's confidence is ~always 1.0, so these code checks are what actually route receipts to review.
 
 ## Conventions
 

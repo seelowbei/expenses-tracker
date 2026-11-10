@@ -112,7 +112,7 @@ describe("extractReceipt", () => {
     const msgs = calls[1]!.messages as { role: string; content: unknown }[];
     expect(msgs.at(-2)!.role).toBe("assistant");
     // Plain-language hint, not the raw regex from the schema.
-    expect(String(msgs.at(-1)!.content)).toContain("txn_date must be the transaction date copied exactly as printed");
+    expect(String(msgs.at(-1)!.content)).toContain("txn_date must be the one payment or transaction date copied exactly as printed");
     expect(String(msgs.at(-1)!.content)).not.toContain("pattern");
   });
 

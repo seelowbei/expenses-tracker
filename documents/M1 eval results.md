@@ -17,7 +17,7 @@ Model: `@cf/meta/llama-3.2-11b-vision-instruct` through the real agent (`worker/
 - 6 photos of thermal paper (one faded, one with the date only in a POS footer stamp)
 - 4 digital receipts or screenshots (email receipts, delivery and ride-hailing apps)
 
-The set has no PDFs, so the PDF path (`toMarkdown()` and then the same model) is still untested.
+Plus 2 text PDFs (email receipts from booking sites: one in SGD, one in JPY), added after the image runs. See "PDF path" below.
 
 ## Results (final run)
 
@@ -51,17 +51,37 @@ The first run scored 60% on date. The model copied the prompt's example date int
 - **Merchant:** a receipt with the brand only as a logo (Chinese calligraphy) returned the legal entity name.
 - **Category:** falls back to `other` for less obvious cases (a certification fee, a bottled drink from a TCM shop).
 
+## PDF path
+
+Two text PDFs went through `toMarkdown()` and then the same model as text.
+
+- **Cheaper and faster than images:** about 1,700 input tokens and 16–25 neurons per receipt, against about 7,700 and 43 for images.
+- **The flight booking:** extracted correctly. It used the issue date rather than the flight dates.
+- **The hotel booking:** first run, the model copied the stay ("Oct 12, 2026 - Oct 15, 2026") as the date and failed twice. After the date rule named payment/issue dates and excluded travel dates and ranges, the date was right. The total came back garbled (26,456 instead of 24,656), and `total_mismatch` caught it against the copied line.
+- **Scanned PDFs:** none tested yet.
+
+## Run-to-run variation
+
+Results vary between runs even at temperature 0. In the 12-receipt run, a receipt that was right three times before returned its first item (349.00) as the total, and copied an unrelated line as `total_text`. Total accuracy for that run was 75% (9/12). This is one more reason not to treat a 10-receipt score as stable.
+
 ## Review checks
 
-Model confidence can't route receipts to review, so the model now also copies the line it read the total from (`total_text`). Code flags `needs_review` when that line contains a different amount (`total_mismatch`), when it's a subtotal line (`total_is_subtotal`), or when the extraction needed a repair call (`repaired`). These run alongside the existing checks: unknown category, date out of range, line items not adding up.
+Model confidence can't route receipts to review, so the model now also copies the line it read the total from (`total_text`). Code flags `needs_review` when:
 
-Replaying the final run's extractions through the checks:
+- **`total_mismatch`:** the line shows a different amount (tax amounts ignored).
+- **`total_unverified`:** the line has neither an amount nor a total word, or is missing.
+- **`total_is_subtotal`:** it's a subtotal line.
+- **`repaired`:** the extraction needed a repair call.
 
-| Status | Receipts | Merchant, date and total all correct |
+These run alongside the existing checks: unknown category, date out of range, line items not adding up.
+
+Replaying two runs' extractions through the final checks:
+
+| Run | `done` (merchant, date and total all correct) | `needs_review` (any of those wrong) |
 | --- | --- | --- |
-| `done` | 7 | 5 |
-| `needs_review` | 3 | 2 |
+| 10 images | 6 (4) | 4 (1) |
+| 10 images + 2 PDFs | 7 (5) | 5 (3) |
 
-- The wrong delivery-app total is now caught (`total_mismatch`).
-- No receipt with a correct total is flagged by the total checks. A first version that also flagged lines with no amount sent 6 of 10 to review, mostly false alarms. Lines with no amount happen with table layouts, a receipt number, or a bare "Total".
-- Still `done` but wrong: a merchant returned as its legal entity name, and a faded date misread (09 → 19). No code check can see either. Only your corrections will.
+- Every wrong total went to review in both runs: the delivery-app voucher, the multi-item receipt, and the garbled JPY total.
+- One false alarm (`total_unverified`), when the model copied a receipt number instead of the total line. A stricter first version, which flagged any line without an amount, sent 6 of 10 to review.
+- Still `done` but wrong: a merchant returned as its legal entity name, and a faded date misread (09 → 19). No code check can see either; only your corrections will.
