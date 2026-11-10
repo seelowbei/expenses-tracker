@@ -13,5 +13,12 @@ export default defineConfig({
   ],
   test: {
     include: ["test/**/*.test.ts"],
+    coverage: {
+      // workerd has no V8 coverage support; Istanbul instruments the code instead.
+      provider: "istanbul",
+      include: ["src/**/*.ts"],
+      reporter: ["text", "html", "lcov"],
+      reportsDirectory: "coverage",
+    },
   },
 });

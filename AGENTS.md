@@ -36,6 +36,7 @@ pnpm workspace: `web`, `worker`, `infrastructure/*`.
 pnpm install
 pnpm -r test                                          # all tests
 pnpm --filter worker test                             # worker tests in workerd (@cloudflare/vitest-plugin)
+pnpm --filter worker coverage                         # tests + Istanbul coverage -> worker/coverage (V8 unsupported in workerd)
 pnpm --filter web build                               # SPA -> web/dist (needed before wrangler dev)
 pnpm --filter worker bundle                           # Worker -> worker/dist/index.js (for Pulumi services)
 pnpm --filter worker dev                              # local app on :8787 (needs Cloudflare auth: AI is always remote)
