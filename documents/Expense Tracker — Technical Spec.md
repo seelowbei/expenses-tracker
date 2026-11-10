@@ -33,7 +33,7 @@ A web app where users sign in with Google, upload a receipt (image or PDF), and 
 
 ## Architecture
 
-A single Worker has two handlers. `fetch` serves the SPA and API; `queue` runs extraction. D1 holds all structured data, Workers AI does the reading, and Google provides sign-in and file storage.
+A single Worker has three handlers. `fetch` serves the SPA and API; `queue` runs extraction; `scheduled` (a daily Cron Trigger at 00:05 UTC) re-enqueues receipts parked by the AI quota. D1 holds all structured data, Workers AI does the reading, and Google provides sign-in and file storage.
 
 &#91;embedded content: architecture · Cloudflare Workers + Google\]
 
@@ -99,7 +99,9 @@ CREATE TABLE receipts (
   status         TEXT NOT NULL,              -- uploading | queued | processing | done | needs_review | failed
   attempts       INTEGER NOT NULL DEFAULT 0,
   error          TEXT,
-  raw_extraction TEXT,                       -- parsed Extraction JSON (after normalisation, before user edits): audit + accuracy
+  raw_extraction TEXT,                       -- parsed Extraction JSON (after normalisation, before user edits): audit + accuracy;
+                                             -- after a failed repair, the fields that did parse (unvalidated), to pre-fill review
+  retry_after    TEXT,                       -- ISO-8601 UTC; set when parked for the AI quota (status queued), cleared on re-enqueue
   created_at     TEXT NOT NULL,
   UNIQUE (user_id, sha256)
 );
@@ -182,14 +184,16 @@ Uploads return as soon as the file is saved to Drive and queued. Extraction then
 3. PDF: run `env.AI.toMarkdown()` to get text, then a text LLM call with the extraction prompt. If the text is empty (a scanned PDF), fail with `unsupported_scanned_pdf` in v1.
 4. Image: one vision LLM call with the extraction prompt.
 5. Validate with Zod. If invalid, retry once with a repair prompt that includes the validation errors.
-6. Valid with `confidence >= 0.7`: insert `ledger_entries` (`source='ai'`) and set status `done`. Valid but low confidence: insert the entry and set status `needs_review`.
-7. On an error, `msg.retry({ delaySeconds })` with backoff; after 3 attempts the message goes to the DLQ and status becomes `failed`.
-8. Every Workers AI call in steps 3–5 writes one `ai_usage` row, whatever the outcome (including quota and invalid-output failures). Rows are written in the same D1 `batch()` as the receipt's status update, so usage is never lost when a later step fails.
+6. Valid: insert `ledger_entries` (`source='ai'`). Status is `done` when post-validation finds no review reason, otherwise `needs_review` (see "Post-validation rules").
+7. Still invalid after the repair call: insert **no** ledger entry. Store the fields that did parse in `receipts.raw_extraction`, set status `needs_review` and `error='invalid_output'`, and ack the message. The review form is pre-filled from those fields (in the M1 eval, only the date was unreadable), and the entry is created with `source='ai_edited'` when the user saves.
+8. Workers AI quota exhausted: park the receipt and ack the message; it does not use a queue retry (see "When a limit is hit").
+9. Any other error (Drive, other Workers AI errors): `msg.retry({ delaySeconds })` with backoff; after 3 attempts the message goes to the DLQ and status becomes `failed`.
+10. Every Workers AI call in steps 3–5 writes one `ai_usage` row, whatever the outcome (including quota and invalid-output failures). Rows are written in the same D1 `batch()` as the receipt's status update, so usage is never lost when a later step fails.
 
 **4. Review and ledger**
 
 1. The ledger page calls `GET /api/ledger?from&to&category`, grouped by category with monthly totals computed in SQL and grouped by currency (GROUP BY category\_id, month, currency); amounts in different currencies are never summed together.
-2. Entries in `needs_review` are highlighted at the top. The user edits fields or changes the category, and the entry's `source` becomes `ai_edited`.
+2. Entries in `needs_review` are highlighted at the top. The user edits fields or changes the category, and the entry's `source` becomes `ai_edited`. Receipts in `needs_review` with no entry yet (invalid output) show the pre-filled form; saving creates the entry.
 3. Deleting an entry asks whether to delete the Drive file too (`files.delete`; allowed under `drive.file` because the app created the file).
 
 ## Extraction agent
@@ -345,15 +349,15 @@ Expected cost is $0/month. Workers AI's 10,000 neurons/day is the cap that will 
 
 | Failure | Behaviour |
 | --- | --- |
-| Workers AI quota exhausted | Consumer catches the error, sets status `queued`, and calls `msg.retry({ delaySeconds })` to land after 00:05 UTC. If the delay exceeds 24 h retention, set `failed` with a "retry tomorrow" message. |
+| Workers AI quota exhausted | Consumer catches the error, acks the message, and parks the receipt in D1: status `queued`, `retry_after` = next 00:05 UTC. The daily Cron Trigger (`5 0 * * *`, the `scheduled` handler) re-sends every parked receipt whose `retry_after` has passed to `RECEIPT_QUEUE` and clears `retry_after`. Queue retries are not used for this: on the Free plan, messages are kept for a fixed 24 h, delays max out at 24 h, and each retry counts toward `max_retries`. The UI shows "waiting for tomorrow's AI quota (after 08:00 SGT)". |
 | Drive 401 / `invalid_grant` | `drive_status='disconnected'`, receipt `failed`, UI prompts to reconnect |
 | Drive 429 / 5xx | Retry with backoff of 30 s, 2 min, 10 min, then DLQ |
-| Invalid LLM JSON twice | Entry created with nulls, status `needs_review` |
+| Invalid LLM JSON twice | No ledger entry. Receipt `needs_review` with `error='invalid_output'`; the review form is pre-filled from the fields that did parse, and the entry is created when the user saves. `ledger_entries` keeps its `NOT NULL` columns. |
 | Error 1027 (daily requests) | SPA shows a "service busy, try later" banner; uploads are not lost because the browser keeps the file until a 202 |
 
 **Upgrade trigger:** move to Workers Paid ($5/month) when neurons regularly exceed about 8,000/day or CPU errors appear. Paid adds $0.011 per 1,000 neurons beyond the free allocation and up to 5 min CPU. Daily neurons come from `ai_usage` (`SUM(neurons_est)` per UTC day), checked against the Workers AI dashboard now and then because `neurons_est` is an estimate.
 
-**Optional quota guard:** before an AI call, the consumer can read today's `SUM(neurons_est)` and, above about 9,500, defer the message as in "Workers AI quota exhausted" below instead of making a call that will fail.
+**Optional quota guard:** before an AI call, the consumer can read today's `SUM(neurons_est)` and, above about 9,500, park the receipt as in "Workers AI quota exhausted" above instead of making a call that will fail.
 
 Sources: [Workers limits](https://developers.cloudflare.com/workers/platform/limits) · [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/) · [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) · [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) · [Queues pricing](https://developers.cloudflare.com/queues/pricing/) · [Markdown conversion](https://developers.cloudflare.com/workers-ai/features/markdown-conversion/)
 
@@ -393,7 +397,7 @@ expense-tracker/
 | `expense-foundation` | `D1Database` (protected), `Queue` receipts + DLQ | Exports account id, D1 id/name, queue id/name, DLQ name | Manually, on change |
 | `expense-services` | `WorkersScript` (bundle + `web/dist` assets + bindings), `QueueConsumer`, `WorkersScriptSubdomain`, optional `WorkersCustomDomain` | Reads foundation outputs via `StackReference` to the same stack name | CI on every deploy |
 
-The `services` stack sets the deployed bindings: `AI`, `DB`, `RECEIPT_QUEUE`, `APP_ORIGIN`, `DEFAULT_CURRENCY` and the secrets. The queue consumer uses `batchSize: 1`, `maxRetries: 3` and the DLQ. With a batch size of 1, each receipt runs in its own invocation, so its CPU budget and failure stay separate from other receipts.
+The `services` stack sets the deployed bindings: `AI`, `DB`, `RECEIPT_QUEUE`, `APP_ORIGIN`, `DEFAULT_CURRENCY` and the secrets. The queue consumer uses `batchSize: 1`, `maxRetries: 3` and the DLQ. The services stack also defines the Worker's daily Cron Trigger (`5 0 * * *`), which `wrangler.jsonc` mirrors locally under `triggers.crons`. With a batch size of 1, each receipt runs in its own invocation, so its CPU budget and failure stay separate from other receipts.
 
 **wrangler.jsonc (abridged)**
 
@@ -508,6 +512,6 @@ The biggest risk is extraction accuracy from the free open-source vision model. 
 
 1. **M1 — Extraction spike:** Worker + Workers AI only, extract `txn_time` too, run the eval, record accuracy (including time) and neurons per receipt from the model's token usage. Done provisionally on 10 receipts (see "Evaluation before launch").
 2. **M2 — Auth + Drive:** Google sign-in, encrypted refresh tokens, folder creation, upload to Drive.
-3. **M3 — Pipeline:** Queue consumer, validation, ledger writes (including `txn_time`), `ai_usage` rows for every AI call, retries/DLQ, status polling.
+3. **M3 — Pipeline:** Queue consumer, validation, ledger writes (including `txn_time`), `ai_usage` rows for every AI call, retries/DLQ, invalid-output and AI-quota parking (`scheduled` cron), status polling.
 4. **M4 — Ledger UI:** category/month views (entries ordered by date and time), review and edit including time, categories, delete.
 5. **M5 — Hardening & prod:** CI/CD, prod env and domain, limits banners, privacy policy, OAuth consent screen published as In production, allow-list set.

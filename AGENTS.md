@@ -4,7 +4,7 @@ Instructions for coding agents (Codex, Claude Code, others). This file is the so
 
 ## Project
 
-Receipt-to-ledger expense tracker for two users on the **Cloudflare Workers Free plan**. One Worker serves a static React SPA and a Hono API (`fetch` handler) and runs AI extraction (`queue` handler). D1 stores all structured data; receipt files live in each user's Google Drive.
+Receipt-to-ledger expense tracker for two users on the **Cloudflare Workers Free plan**. One Worker serves a static React SPA and a Hono API (`fetch` handler), runs AI extraction (`queue` handler), and re-enqueues receipts parked by the AI quota (`scheduled` handler, daily Cron Trigger at 00:05 UTC). D1 stores all structured data; receipt files live in each user's Google Drive.
 
 The design is in `documents/Expense Tracker — Technical Spec.md`. Read the relevant section before implementing anything; it defines the schema, flows, API, prompt, Zod schema and failure handling. If the code and spec disagree, stop and ask rather than silently picking one.
 
@@ -15,7 +15,7 @@ The design is in `documents/Expense Tracker — Technical Spec.md`. Read the rel
 ```text
 documents/           Technical spec and other project docs
 web/                 Vite + React + TS SPA (TanStack Query, Tailwind) -> web/dist
-worker/src/index.ts  Hono app; exports { fetch, queue }
+worker/src/index.ts  Hono app; exports { fetch, queue, scheduled }
 worker/src/auth/     arctic Google OIDC + PKCE, sessions, AES-GCM token crypto
 worker/src/drive/    Drive v3 client (drive.file scope)
 worker/src/agent/    prompt, Zod Extraction schema, post-validation rules
@@ -108,13 +108,8 @@ Run typecheck and the relevant tests before calling a change done.
 - Add dependencies that need Node-only APIs beyond `nodejs_compat`, or that are large enough to hurt cold start/CPU.
 - Send real receipt images or personal data to any service other than Workers AI and Google Drive.
 
-## Spec gaps to resolve before implementing
-
-These are inconsistencies in the current spec. Ask before choosing:
-
-1. "Invalid LLM JSON twice → entry created with nulls" conflicts with `ledger_entries` `NOT NULL` on `merchant`, `txn_date`, `total_minor`, `category_id`.
-2. AI-quota retry "to land after 00:05 UTC" may exceed the Queues maximum `delaySeconds`; verify the current limit before relying on it.
-
 ## Spec revisions not yet in code
 
+- **Nov 10, 2026 (decided):** "Invalid LLM JSON twice" creates no ledger entry: the receipt goes to `needs_review` with `error='invalid_output'` and a review form pre-filled from the fields that did parse; the entry is created on save. `extractReceipt` does not yet return those partial fields. M3 work.
+- **Nov 10, 2026 (decided):** AI quota exhausted parks the receipt in D1 (`queued` + `receipts.retry_after`) and a `scheduled` Cron Trigger at 00:05 UTC re-enqueues it; no `msg.retry` across days. The cron goes in both `infrastructure/services` and `wrangler.jsonc`. M3 work.
 - **Nov 10, 2026:** `txn_time` and per-call usage capture are implemented in `worker/src/agent/` (`AiCallRecord` in `usage.ts` mirrors the `ai_usage` columns). Persisting those records to D1 (`ai_usage` table, Drizzle schema, migration, `batch()` with the status update) is M3 work, not a code/spec conflict.
