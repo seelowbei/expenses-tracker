@@ -8,12 +8,12 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
 ## Status
 
-**M1 (extraction spike) in progress.** The foundation stacks (D1 + queues) are applied for staging and production. `worker/` has the extraction agent and the eval runner ([`worker/eval/README.md`](./worker/eval/README.md)); the 50-receipt eval hasn't been run yet. Work follows the spec's milestones:
+**M2 (sign-in + Drive upload) built locally.** M1 passed provisionally on 10 receipts ([`documents/M1 eval results.md`](./documents/M1%20eval%20results.md)). M2 adds Google sign-in, encrypted refresh tokens, the `Expense Receipts` Drive folder, uploads and the first D1 migrations ([`documents/M2 plan.md`](./documents/M2%20plan.md)). Work follows the spec's milestones:
 
 | Milestone | Scope |
 | --- | --- |
-| **M1 — Extraction spike** | Worker + Workers AI only; 50-receipt eval; record accuracy and neurons/receipt |
-| M2 — Auth + Drive | Google sign-in, encrypted refresh tokens, Drive folder, upload |
+| M1 — Extraction spike | Worker + Workers AI only; 50-receipt eval; record accuracy and neurons/receipt |
+| **M2 — Auth + Drive** | Google sign-in, encrypted refresh tokens, Drive folder, upload |
 | M3 — Pipeline | Queue consumer, Zod validation, ledger writes, retries/DLQ, status polling |
 | M4 — Ledger UI | Category/month views, review & edit, categories, delete |
 | M5 — Hardening & prod | CI/CD, prod env, limit banners, privacy policy, OAuth consent published |
@@ -24,7 +24,7 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 | --- | --- |
 | Frontend | Vite + React + TypeScript, TanStack Query, Tailwind (static assets) |
 | API | Hono on a single Cloudflare Worker (`fetch` + `queue` handlers) |
-| Auth | `arctic` (Google OIDC + PKCE), own `sessions` table |
+| Auth | `oauth4webapi` (Google OIDC + PKCE), own `sessions` table |
 | Database | Cloudflare D1 + Drizzle ORM |
 | Async jobs | Cloudflare Queues (producer + consumer in the same Worker), DLQ |
 | AI | Workers AI `@cf/meta/llama-3.2-11b-vision-instruct`; `env.AI.toMarkdown()` for PDFs |
@@ -103,7 +103,7 @@ The dev token has no D1 or Queues access, so it can't touch the staging or produ
 
 ## Local development
 
-> **During M1** there is no `web/` app, D1 schema or sign-in yet. You only need Cloudflare auth for Workers AI and `pnpm --filter worker dev`; follow [`worker/eval/README.md`](./worker/eval/README.md). The steps below apply from M2.
+> The M1 eval needs only Cloudflare auth for Workers AI ([`worker/eval/README.md`](./worker/eval/README.md)). Sign-in and uploads also need the Google OAuth client from the spec's "One-time setup".
 
 Local config comes from two git-ignored files. Each has a committed template listing every variable:
 
@@ -121,10 +121,12 @@ Then fill in the values. The secrets guard (deny rules plus `.claude/hooks/prote
 
 ```bash
 pnpm install
-pnpm --filter worker exec wrangler d1 migrations apply expense-local --local
-pnpm --filter web build
+pnpm --filter worker db:migrate:local
+pnpm --filter web build        # or `pnpm --filter web dev` to rebuild on every change
 pnpm --filter worker dev
 ```
+
+Use Chrome or Firefox locally: the session cookie is `Secure`, which Safari may drop on `http://localhost`. Schema changes: edit `worker/src/db/schema.ts`, run `pnpm --filter worker db:generate`, check the SQL in `worker/migrations/` is additive, then migrate.
 
 App runs at http://localhost:8787 with local D1 and Queues (Miniflare). The top-level `wrangler.jsonc` config is local-only. Workers AI calls go to Cloudflare even in local dev and count against the daily neuron quota.
 

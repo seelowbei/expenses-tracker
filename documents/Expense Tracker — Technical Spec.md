@@ -4,6 +4,7 @@ Nov 9, 2026 · @Celine Low
 
 **Revisions**
 
+- Nov 10, 2026 (M2): OAuth uses `oauth4webapi` instead of `arctic`, which npm marks as no longer supported; logout deletes all of the user's sessions; the resumable upload for files over 5 MB is deferred to M5 (until then `413 file_too_large`).
 - Nov 10, 2026: capture the transaction time when the receipt prints one (`txn_time`); record Workers AI usage (tokens, estimated neurons) per model call in a new `ai_usage` table; extraction prompt and post-validation updated from the first M1 runs.
 
 ## Overview & scope
@@ -47,7 +48,7 @@ The stack is a static SPA with a Hono API on a single Worker. It avoids server r
 | --- | --- | --- |
 | Frontend | Vite + React + TypeScript, TanStack Query, Tailwind | Served as static assets, which are free and unlimited |
 | API | Hono on Cloudflare Workers | Small, typed router built for Workers |
-| Auth | `arctic` (Google OAuth/OIDC) + own session table | Small library with no framework lock-in; full control over refresh tokens |
+| Auth | `oauth4webapi` (Google OAuth/OIDC, PKCE) + own session table | Small, dependency-free, Web Crypto only; full control over refresh tokens |
 | Database | Cloudflare D1 + Drizzle ORM | SQLite with typed queries; migrations via Wrangler |
 | Async jobs | Cloudflare Queues (producer + consumer in the same Worker) | Decouples slow AI calls from the upload request |
 | AI | Workers AI: `@cf/meta/llama-3.2-11b-vision-instruct` for images; `env.AI.toMarkdown()` + a text LLM for PDFs | Free 10,000 neurons/day; no external API key |
@@ -293,7 +294,7 @@ All `/api/*` routes need a valid session cookie and are scoped to the session's 
 | --- | --- | --- | --- |
 | GET | `/auth/google` | Start OAuth | 302 to Google |
 | GET | `/auth/google/callback` | Finish OAuth, create session | 302 to `/` |
-| POST | `/auth/logout` | Delete session | 204 |
+| POST | `/auth/logout` | Delete all of the user's sessions | 204 |
 | GET | `/api/me` | Profile, Drive status, default currency | 200 |
 | POST | `/api/receipts` | Multipart upload (≤ 5 MB) | 202 receipt / 409 duplicate |
 | POST | `/api/receipts/resumable` | Start Drive resumable upload (> 5 MB) | 200 `{ receiptId, uploadUrl }` |

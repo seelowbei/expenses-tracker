@@ -8,7 +8,7 @@ Receipt-to-ledger expense tracker for two users on the **Cloudflare Workers Free
 
 The design is in `documents/Expense Tracker — Technical Spec.md`. Read the relevant section before implementing anything; it defines the schema, flows, API, prompt, Zod schema and failure handling. If the code and spec disagree, stop and ask rather than silently picking one.
 
-**Status:** M1 (extraction spike) done provisionally: the eval passes on 10 local receipts (`documents/M1 eval results.md`), which stay as a regression set; re-run `pnpm --filter worker eval` after any change in `src/agent/`. Real accuracy will come from user corrections (spec, "Evaluation before launch"). Do not build M2+ features unless asked.
+**Status:** M1 (extraction spike) done provisionally: the eval passes on 10 local receipts (`documents/M1 eval results.md`), which stay as a regression set; re-run `pnpm --filter worker eval` after any change in `src/agent/`. Real accuracy will come from user corrections (spec, "Evaluation before launch"). M2 (Google sign-in + Drive upload) built: `/auth/*`, `/api/me`, `POST/GET /api/receipts`, the first migrations (full spec schema + default categories) and the SPA in `web/`. Plan and decisions: `documents/M2 plan.md`. Do not build M3+ features unless asked.
 
 ## Layout
 
@@ -16,7 +16,8 @@ The design is in `documents/Expense Tracker — Technical Spec.md`. Read the rel
 documents/           Technical spec and other project docs
 web/                 Vite + React + TS SPA (TanStack Query, Tailwind) -> web/dist
 worker/src/index.ts  Hono app; exports { fetch, queue, scheduled }
-worker/src/auth/     arctic Google OIDC + PKCE, sessions, AES-GCM token crypto
+worker/src/auth/     oauth4webapi Google OIDC + PKCE, sessions, AES-GCM token crypto, /auth routes
+worker/src/api/      /api/me, /api/receipts
 worker/src/drive/    Drive v3 client (drive.file scope)
 worker/src/agent/    prompt, Zod Extraction schema, post-validation rules
 worker/src/db/       Drizzle schema + queries
@@ -109,6 +110,8 @@ Run typecheck and the relevant tests before calling a change done.
 - Send real receipt images or personal data to any service other than Workers AI and Google Drive.
 
 ## Spec revisions not yet in code
+
+- **Nov 10, 2026 (M2, decided):** uploads end in `queued` without sending to `RECEIPT_QUEUE`; M3 adds the send in `src/api/receipts.ts` together with the consumer and the SPA's 3 s polling. The resumable upload for files over 5 MB is deferred to M5 (until then `413 file_too_large`).
 
 - **Nov 10, 2026 (decided):** "Invalid LLM JSON twice" creates no ledger entry: the receipt goes to `needs_review` with `error='invalid_output'` and a review form pre-filled from the fields that did parse; the entry is created on save. `extractReceipt` does not yet return those partial fields. M3 work.
 - **Nov 10, 2026 (decided):** AI quota exhausted parks the receipt in D1 (`queued` + `receipts.retry_after`) and a `scheduled` Cron Trigger at 00:05 UTC re-enqueues it; no `msg.retry` across days. The cron goes in both `infrastructure/services` and `wrangler.jsonc`. M3 work.
