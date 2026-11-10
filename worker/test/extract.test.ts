@@ -18,6 +18,7 @@ const good = JSON.stringify({
   txn_time: "6:19 PM",
   currency: "SGD",
   total: 18.4,
+  total_text: "Total Paid S$18.40",
   tax: null,
   payment_method: "ewallet",
   line_items: [],
@@ -102,7 +103,8 @@ describe("extractReceipt", () => {
   it("repairs once with the validation errors and records both calls", async () => {
     const { ai, calls } = fakeAi(['Sorry, here it is: {"merchant": "Grab"}', good]);
     const r = await extractReceipt(ai, jpeg, ctx);
-    expect(r.ok).toBe(true);
+    expect(r.ok && r.status).toBe("needs_review");
+    expect(r.ok && r.reasons).toEqual(["repaired"]);
     expect(r.calls.map((c) => [c.kind, c.outcome])).toEqual([
       ["extract", "invalid_output"],
       ["repair", "ok"],

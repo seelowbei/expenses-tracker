@@ -204,13 +204,14 @@ The agent is a single structured-output call per receipt, plus at most one repai
 
 **System prompt (strict, short)**
 
-The first M1 runs showed the model replying in prose, leaving dates as `09/11/2026` and using unit prices for line items. The rules below fix those. A 10-receipt round then showed the model copying example dates into answers and reordering day/month wrongly even when told to prefer DD/MM (09/11/2026 -> 2026-09-11), so it now copies the date exactly as printed and code converts it (see normalisation). The same round added the tax rules (GST-inclusive is still tax; surcharges are not; nothing printed -> null) and the "after discounts and vouchers" total rule; the JSON shape of the schema is appended after them, and the user message repeats "Reply with only the JSON object, starting with `{`".
+The first M1 runs showed the model replying in prose, leaving dates as `09/11/2026` and using unit prices for line items. The rules below fix those. A 10-receipt round then showed the model copying example dates into answers and reordering day/month wrongly even when told to prefer DD/MM (09/11/2026 -> 2026-09-11), so it now copies the date exactly as printed and code converts it (see normalisation). The same round added the tax rules (GST-inclusive is still tax; surcharges are not; nothing printed -> null) and the "after discounts and vouchers" total rule. `total_text` asks the model to copy the line it read the total from, so code can check the total (see post-validation); the JSON shape of the schema is appended after them, and the user message repeats "Reply with only the JSON object, starting with `{`".
 
 ```text
 You extract data from a single purchase receipt. Output ONLY one JSON object matching the schema. No prose, no markdown, no code fences. The first character of your reply must be "{" and the last must be "}".
 Rules:
 - Use values printed on the receipt. Never guess. Unknown -> null.
 - total = final amount paid incl. tax and tips, after discounts and vouchers.
+- total_text = the line you read total from, copied exactly as printed: its label and amount. Not printed -> null.
 - tax = the tax amount printed (also when prices are tax-inclusive, e.g. "Inclusive of 9% GST ($0.37)" -> 0.37). Fees, surcharges, service charges and discounts are not tax. No tax amount printed -> null, not 0. Ignore struck-through prices.
 - date: the transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. Not a return, expiry, validity or print date.
 - time: HH:MM, 24-hour, the transaction time printed on the receipt (6:19 PM -> "18:19", 01:14 pm -> "13:14", 9:05 AM -> "09:05"). Not printed -> null. Never use a print, opening-hours or validity time.
@@ -231,6 +232,7 @@ const Extraction = z.object({
   txn_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(), // HH:MM 24-hour, local
   currency: z.string().length(3),
   total: z.number().nonnegative(),
+  total_text: z.string().max(200).nullable(), // line the total was read from, as printed; checked in code
   tax: z.number().nonnegative().nullable(),
   payment_method: z.enum(["cash", "card", "ewallet", "bank_transfer", "other"]).nullable(),
   line_items: z.array(z.object({ description: z.string(), amount: z.number() })).max(50),
@@ -243,6 +245,7 @@ const Extraction = z.object({
 
 - Omitted nullable keys (`tax`, `txn_time`, `payment_method`) become `null`; omitted `line_items` becomes `[]`.
 - Numeric strings become numbers; currency is upper-cased.
+- `total_text` is trimmed and capped at 200 characters; empty or missing becomes `null`. It is a check field, so it never fails an extraction.
 - `payment_method` is mapped to the enum by keyword ("Apple Pay" -> `ewallet`, "VISA" / "NETS" -> `card`, "PayNow" -> `bank_transfer`); any other string becomes `other`, because payment method must never fail an otherwise good extraction.
 - `txn_date` arrives as printed and becomes `YYYY-MM-DD` in code. All-number dates (`DD/MM/YYYY`, `-`, `.`, two-digit years as 20YY) are day-first unless the second number can only be a day (e.g. `11/25/2026`), or year-first when they start with four digits; the first separated date in the string wins, so trailing POS codes are ignored. Month names set the month (`Sep-03-2026`, `October 27, 2026`, `12 Oct 26`). Compact stamps are `DDMMYY`, `YYYYMMDD` or `DDMMYYYY`. Weekdays and times are dropped. Anything else fails the schema and goes to the repair call; the parse error quotes the copied date (max 32 chars) so eval runs show which format to support.
 - Times: `6:19 PM` / `06:19pm` become `18:19`; `18:19:42` drops the seconds. A time that still doesn't parse becomes `null`, because time is optional and must never fail an otherwise good extraction.
@@ -252,6 +255,10 @@ const Extraction = z.object({
 - `category_slug` must be in the user's list; otherwise map it to `other` and set `needs_review`.
 - `txn_date` no later than today + 1 day and no earlier than 10 years ago; otherwise `needs_review`.
 - If line items exist and their sum differs by more than 2% from both `total - tax` and `total` (tax-inclusive receipts, common with Singapore GST): `needs_review`. A null `tax` counts as 0.
+- `total_text` vs `total`: if the copied line contains money amounts and none equals `total`, `needs_review` (`total_mismatch`). Only amounts with decimals count, so receipt numbers and quantities are ignored, except for zero-decimal currencies (JPY). A line with no amount (table layouts print label and amount apart) or no line at all is not flagged.
+- `total_text` labelled as a subtotal, "before discount/voucher/GST" or "excl.": `needs_review` (`total_is_subtotal`).
+- The extraction needed the repair call: `needs_review` (`repaired`).
+- `confidence < 0.7`: `needs_review`. In the M1 eval the model reported 1.0 for every receipt, including wrong ones, so in practice review comes from the code checks above, not from confidence.
 - `txn_time` never forces review.
 - Convert to minor units with the currency's exponent (JPY 0, SGD/USD 2) before insert.
 

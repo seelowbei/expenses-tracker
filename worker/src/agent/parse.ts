@@ -134,6 +134,8 @@ function normalize(raw: unknown): unknown {
   o.payment_method = normalizePaymentMethod(o.payment_method);
   o.line_items ??= [];
   o.total = toNumber(o.total);
+  // A check field only: cap it instead of failing the extraction.
+  o.total_text = typeof o.total_text === "string" && o.total_text.trim() !== "" ? o.total_text.trim().slice(0, 200) : null;
   o.confidence = toNumber(o.confidence);
   if (typeof o.currency === "string") o.currency = o.currency.trim().toUpperCase();
   if (typeof o.txn_date === "string") o.txn_date = normalizeDate(o.txn_date);

@@ -43,10 +43,25 @@ The first run scored 60% on date. The model copied the prompt's example date int
 
 ## Known failure types
 
-- **Confidence is always 1.0.** The 0.7 threshold never triggers, so `needs_review` only comes from post-validation (line items not adding up). A wrong total on a delivery-app receipt was saved as `done`.
-- **Total:** a delivery-app receipt returned the subtotal before a voucher.
+- **Confidence is always 1.0.** The 0.7 threshold never triggers. Review checks in code replace it (see below).
+- **Total:** a delivery-app receipt returned the subtotal before a voucher. The review checks now catch this.
 - **Tax:** returns `0` when no tax is printed instead of `null`, and took a fuel surcharge as tax.
 - **Date:** a faded thermal receipt was misread (09 → 19). No prompt or code change can fix that.
 - **Time:** used the "Print @" time once, despite the prompt rule.
 - **Merchant:** a receipt with the brand only as a logo (Chinese calligraphy) returned the legal entity name.
 - **Category:** falls back to `other` for less obvious cases (a certification fee, a bottled drink from a TCM shop).
+
+## Review checks
+
+Model confidence can't route receipts to review, so the model now also copies the line it read the total from (`total_text`). Code flags `needs_review` when that line contains a different amount (`total_mismatch`), when it's a subtotal line (`total_is_subtotal`), or when the extraction needed a repair call (`repaired`). These run alongside the existing checks: unknown category, date out of range, line items not adding up.
+
+Replaying the final run's extractions through the checks:
+
+| Status | Receipts | Merchant, date and total all correct |
+| --- | --- | --- |
+| `done` | 7 | 5 |
+| `needs_review` | 3 | 2 |
+
+- The wrong delivery-app total is now caught (`total_mismatch`).
+- No receipt with a correct total is flagged by the total checks. A first version that also flagged lines with no amount sent 6 of 10 to review, mostly false alarms. Lines with no amount happen with table layouts, a receipt number, or a bare "Total".
+- Still `done` but wrong: a merchant returned as its legal entity name, and a faded date misread (09 → 19). No code check can see either. Only your corrections will.

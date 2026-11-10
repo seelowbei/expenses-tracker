@@ -1,5 +1,5 @@
 import { FALLBACK_CATEGORY } from "./categories";
-import { isCurrencyCode, toMinor } from "./money";
+import { currencyExponent, isCurrencyCode, toMinor } from "./money";
 import type { Extraction } from "./schema";
 
 export const CONFIDENCE_THRESHOLD = 0.7;
@@ -11,7 +11,10 @@ export type ReviewReason =
   | "date_out_of_range"
   | "invalid_date"
   | "invalid_currency"
-  | "line_items_mismatch";
+  | "line_items_mismatch"
+  | "total_mismatch"
+  | "total_is_subtotal"
+  | "repaired";
 
 export interface LedgerDraft {
   merchant: string;
@@ -34,6 +37,29 @@ export interface ValidationResult {
 
 const DAY_MS = 86_400_000;
 
+// Labels for amounts that are not the final amount paid.
+const NOT_FINAL_TOTAL = /sub[\s-]*total|before\s+(?:discount|voucher|promo|gst|tax)|\bexcl/i;
+
+/**
+ * Money amounts printed in a line: "S$ 1,234.50" -> 1234.5; "12,50" (comma decimal) -> 12.5.
+ * Only amounts with decimals unless `wholeNumbers` (zero-decimal currencies such as JPY), so
+ * receipt numbers and quantities ("Receipt #1414-8063", "TOTAL(6Qt)") are not taken as amounts.
+ */
+export function amountsIn(text: string, wholeNumbers = false): number[] {
+  const out: number[] = [];
+  for (const m of text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) {
+    if (/^\d+,\d{2}$/.test(m)) out.push(Number(m.replace(",", ".")));
+    else if (m.includes(".")) out.push(Number(m.replace(/,/g, "")));
+    else if (wholeNumbers) out.push(Number(m.replace(/,/g, "")));
+  }
+  return out;
+}
+
+export interface ValidateOptions {
+  /** The extraction needed a repair call: the first reply was invalid, so trust it less. */
+  repaired?: boolean;
+}
+
 function parseIsoDate(s: string): number | null {
   const t = Date.parse(`${s}T00:00:00Z`);
   if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== s) return null;
@@ -41,7 +67,12 @@ function parseIsoDate(s: string): number | null {
 }
 
 // Post-validation rules from the spec (code, not LLM). `today` is YYYY-MM-DD (UTC).
-export function postValidate(x: Extraction, categorySlugs: readonly string[], today: string): ValidationResult {
+export function postValidate(
+  x: Extraction,
+  categorySlugs: readonly string[],
+  today: string,
+  opts: ValidateOptions = {},
+): ValidationResult {
   const reasons: ReviewReason[] = [];
 
   let category = x.category_slug.trim().toLowerCase();
@@ -74,6 +105,16 @@ export function postValidate(x: Extraction, categorySlugs: readonly string[], to
       expected === 0 ? Math.abs(sum) < 0.005 : Math.abs(sum - expected) / Math.abs(expected) <= LINE_ITEM_TOLERANCE;
     if (!matches(x.total - tax) && !matches(x.total)) reasons.push("line_items_mismatch");
   }
+
+  // The model reports confidence 1.0 almost always (M1 eval), so check the total against the line
+  // it says it was copied from. A line with a different amount and none equal to the total is a
+  // conflict; a line with no amount (table layouts print the label and amount apart) can't be checked.
+  if (x.total_text !== null) {
+    const printed = amountsIn(x.total_text, currencyExponent(currency) === 0);
+    if (printed.length > 0 && !printed.some((n) => Math.abs(n - x.total) < 0.005)) reasons.push("total_mismatch");
+    if (NOT_FINAL_TOTAL.test(x.total_text)) reasons.push("total_is_subtotal");
+  }
+  if (opts.repaired) reasons.push("repaired");
 
   if (x.confidence < CONFIDENCE_THRESHOLD) reasons.push("low_confidence");
 

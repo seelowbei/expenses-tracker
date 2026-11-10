@@ -11,6 +11,7 @@ const SYSTEM_TEMPLATE = `You extract data from a single purchase receipt. Output
 Rules:
 - Use values printed on the receipt. Never guess. Unknown -> null.
 - total = final amount paid incl. tax and tips, after discounts and vouchers.
+- total_text = the line you read total from, copied exactly as printed: its label and amount. Not printed -> null.
 - tax = the tax amount printed (also when prices are tax-inclusive, e.g. "Inclusive of 9% GST ($0.37)" -> 0.37). Fees, surcharges, service charges and discounts are not tax. No tax amount printed -> null, not 0. Ignore struck-through prices.
 - date: the transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. Not a return, expiry, validity or print date.
 - time: HH:MM, 24-hour, the transaction time printed on the receipt (6:19 PM -> "18:19", 01:14 pm -> "13:14", 9:05 AM -> "09:05"). Not printed -> null. Never use a print, opening-hours or validity time.
@@ -54,6 +55,7 @@ const FIELD_HINTS: Record<string, string> = {
   txn_time: 'txn_time must be "HH:MM" 24-hour (e.g. 6:19 PM -> "18:19") or null.',
   currency: 'currency must be a 3-letter ISO 4217 code, e.g. "SGD".',
   total: "total must be a number without currency symbols, e.g. 4.50.",
+  total_text: "total_text must be the printed line the total was read from, as a string, or null.",
   tax: "tax must be a number (e.g. 0.37) or null.",
   payment_method: 'payment_method must be one of "cash", "card", "ewallet", "bank_transfer", "other", or null.',
   line_items: 'line_items must be an array of {"description": string, "amount": number}, at most 50; [] if none.',

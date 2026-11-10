@@ -9,6 +9,7 @@ export const Extraction = z.object({
   txn_time: z.string().regex(TIME_HHMM).nullable(), // HH:MM 24-hour, local as printed
   currency: z.string().length(3),
   total: z.number().nonnegative(),
+  total_text: z.string().max(200).nullable(), // line the total was read from, as printed; checked in code
   tax: z.number().nonnegative().nullable(),
   payment_method: z.enum(["cash", "card", "ewallet", "bank_transfer", "other"]).nullable(),
   line_items: z.array(z.object({ description: z.string(), amount: z.number() })).max(50),
@@ -25,6 +26,7 @@ export const EXTRACTION_SHAPE = `{
   "txn_time": "HH:MM" | null,         // 24-hour transaction time as printed
   "currency": "ISO 4217 code",
   "total": number,
+  "total_text": string | null,        // the line you read total from, copied exactly as printed
   "tax": number | null,
   "payment_method": "cash" | "card" | "ewallet" | "bank_transfer" | "other" | null,
   "line_items": [{ "description": string, "amount": number }],   // max 50, [] if none

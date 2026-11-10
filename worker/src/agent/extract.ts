@@ -166,7 +166,7 @@ export async function extractReceipt(ai: AiClient, input: ReceiptInput, ctx: Ext
       ]));
       if (!parsed.ok) return { ok: false, code: "invalid_output", detail: parsed.errors.join("; "), ...t };
     }
-    const v = postValidate(parsed.value, ctx.categorySlugs, ctx.today);
+    const v = postValidate(parsed.value, ctx.categorySlugs, ctx.today, { repaired: t.calls.some((c) => c.kind === "repair") });
     return { ok: true, status: v.status, reasons: v.reasons, extraction: parsed.value, draft: v.draft, ...t };
   } catch (e) {
     if (e instanceof AiCallFailed) return { ok: false, code: e.code, detail: e.message, ...t };
