@@ -8,7 +8,7 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
 ## Status
 
-**M2 (sign-in + Drive upload) built locally.** M1 passed provisionally on 10 receipts ([`documents/M1 eval results.md`](./documents/M1%20eval%20results.md)). M2 adds Google sign-in, encrypted refresh tokens, the `Expense Receipts` Drive folder, uploads and the first D1 migrations ([`documents/M2 plan.md`](./documents/M2%20plan.md)). Work follows the spec's milestones:
+**M2 (sign-in + Drive upload) done**, verified locally with real Google accounts; not deployed to staging yet. M1 passed provisionally on 10 receipts ([`documents/M1 eval results.md`](./documents/M1%20eval%20results.md)). M2 adds Google sign-in, encrypted refresh tokens, the `Expense Receipts` Drive folder, uploads and the first D1 migrations ([`documents/M2 plan.md`](./documents/M2%20plan.md)). Work follows the spec's milestones:
 
 | Milestone | Scope |
 | --- | --- |

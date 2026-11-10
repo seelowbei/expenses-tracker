@@ -8,7 +8,7 @@ Receipt-to-ledger expense tracker for two users on the **Cloudflare Workers Free
 
 The design is in `documents/Expense Tracker — Technical Spec.md`. Read the relevant section before implementing anything; it defines the schema, flows, API, prompt, Zod schema and failure handling. If the code and spec disagree, stop and ask rather than silently picking one.
 
-**Status:** M1 (extraction spike) done provisionally: the eval passes on 10 local receipts (`documents/M1 eval results.md`), which stay as a regression set; re-run `pnpm --filter worker eval` after any change in `src/agent/`. Real accuracy will come from user corrections (spec, "Evaluation before launch"). M2 (Google sign-in + Drive upload) built: `/auth/*`, `/api/me`, `POST/GET /api/receipts`, the first migrations (full spec schema + default categories) and the SPA in `web/`. Plan and decisions: `documents/M2 plan.md`. Do not build M3+ features unless asked.
+**Status:** M1 (extraction spike) done provisionally: the eval passes on 10 local receipts (`documents/M1 eval results.md`), which stay as a regression set; re-run `pnpm --filter worker eval` after any change in `src/agent/`. Real accuracy will come from user corrections (spec, "Evaluation before launch"). M2 (Google sign-in + Drive upload) done and verified locally with real Google accounts: `/auth/*`, `/api/me`, `POST/GET /api/receipts`, the first migrations (full spec schema + default categories) and the SPA in `web/`. Plan and decisions: `documents/M2 plan.md`. Do not build M3+ features unless asked.
 
 ## Layout
 
