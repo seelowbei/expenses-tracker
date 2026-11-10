@@ -3,9 +3,11 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "expense-tracker",
+  "account_id": "10640769d8415d865c5f386b850d0ef5",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01", // keep in sync with infrastructure/services config
   "compatibility_flags": ["nodejs_compat"],
+  "minify": true,
   "assets": {
     "directory": "../web/dist",
     "not_found_handling": "single-page-application",
@@ -21,7 +23,8 @@
       { "queue": "receipts-local", "max_batch_size": 1, "max_retries": 3, "dead_letter_queue": "receipts-local-dlq" }
     ]
   },
-  "vars": { "APP_ORIGIN": "http://localhost:8787", "DEFAULT_CURRENCY": "SGD" },
+  // Local only. DEV_ROUTES enables /api/dev/* (M1 extraction spike); Pulumi never sets it.
+  "vars": { "APP_ORIGIN": "http://localhost:8787", "DEFAULT_CURRENCY": "SGD", "DEV_ROUTES": "true" },
   "observability": { "enabled": true },
   "env": {
     // Only so `wrangler d1 migrations apply expense-<env> --env <env> --remote` can find each database.

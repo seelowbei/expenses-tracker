@@ -1,0 +1,26 @@
+# Template for worker/.dev.vars (git-ignored). Copy and fill in:
+#   cp worker/.dev.vars.sample worker/.dev.vars
+#
+# Local secrets for the Worker under `wrangler dev` (needed from M2: sign-in + Drive).
+# Not needed for the M1 eval. Staging/production set the same values as Pulumi secrets:
+#   cd infrastructure/services && pulumi config set --secret <key> -s <stack>
+# (key names in brackets below).
+
+# Google OAuth "dev" Web client; redirect URI http://localhost:8787/auth/google/callback  [googleClientId]
+GOOGLE_CLIENT_ID=
+# [googleClientSecret]
+GOOGLE_CLIENT_SECRET=
+
+# 32 random bytes, base64: openssl rand -base64 32. Encrypts Google refresh tokens.  [tokenEncKey]
+# Use a different value per environment; changing it makes stored refresh tokens unreadable.
+TOKEN_ENC_KEY=
+# 32 random bytes, base64: openssl rand -base64 32. Signs the OAuth state cookie.  [sessionSecret]
+SESSION_SECRET=
+
+# Comma-separated Google accounts allowed to sign in (the two users).  [allowedEmails]
+ALLOWED_EMAILS=
+
+# Non-secret vars come from wrangler.jsonc "vars" (APP_ORIGIN, DEFAULT_CURRENCY, DEV_ROUTES).
+# Uncomment to override locally:
+# APP_ORIGIN=http://localhost:8787
+# DEFAULT_CURRENCY=SGD

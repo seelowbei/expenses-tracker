@@ -8,7 +8,7 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
 ## Status
 
-Pre-code. `infrastructure/` and `worker/wrangler.jsonc` exist; the foundation stacks (D1 + queues) are applied for staging and production. Work follows the spec's milestones:
+**M1 (extraction spike) in progress.** The foundation stacks (D1 + queues) are applied for staging and production. `worker/` has the extraction agent and the eval runner ([`worker/eval/README.md`](./worker/eval/README.md)); the 50-receipt eval hasn't been run yet. Work follows the spec's milestones:
 
 | Milestone | Scope |
 | --- | --- |
@@ -30,7 +30,7 @@ Pre-code. `infrastructure/` and `worker/wrangler.jsonc` exist; the foundation st
 | AI | Workers AI `@cf/meta/llama-3.2-11b-vision-instruct`; `env.AI.toMarkdown()` for PDFs |
 | File storage | Google Drive API v3, `drive.file` scope |
 | Validation | Zod (API bodies + LLM output) |
-| Tooling | pnpm workspaces, Wrangler, Vitest + `@cloudflare/vitest-pool-workers`, GitHub Actions |
+| Tooling | pnpm workspaces, Wrangler, Vitest + `@cloudflare/vitest-plugin`, GitHub Actions |
 | Infrastructure | Pulumi (TypeScript, Pulumi Cloud state), `@pulumi/cloudflare` |
 
 ```text
@@ -62,7 +62,7 @@ infrastructure/
 ## Prerequisites
 
 - Node.js 22+ and pnpm 10+
-- A Cloudflare account (Free plan) and `wrangler login`
+- A Cloudflare account (Free plan) with two API tokens: provisioning and dev (see [Cloudflare tokens](#cloudflare-tokens))
 - Pulumi CLI logged in to Pulumi Cloud (staging/production only)
 - A Google Cloud project with the Drive API enabled
 
@@ -88,25 +88,42 @@ infrastructure/
    - `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` (dev)
    - `https://<production-origin>/auth/google/callback` (prod)
 
-**GitHub repo secrets:** `CLOUDFLARE_API_TOKEN` (Account: Workers Scripts, D1, Queues edit; Zone: Workers Routes edit for a custom domain), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`.
+**GitHub repo secrets:** `CLOUDFLARE_API_TOKEN` (the provisioning token below), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`.
+
+### Cloudflare tokens
+
+Two custom API tokens, both scoped to this account only. Never reuse one for the other's job.
+
+| Token | Used by | Account permissions |
+| --- | --- | --- |
+| `expense-tracker` (provisioning) | `pulumi up` for foundation/services, CI | D1 · Edit, Queues · Edit, Workers Scripts · Edit, Account Settings · Read (+ Zone · Workers Routes · Edit for a custom domain) |
+| `expense-tracker-dev` | `wrangler dev`, the M1 eval | Workers AI · Read, Workers AI · Edit, Workers Scripts · Edit (remote-binding preview), Account Settings · Read. Set a TTL. |
+
+The dev token has no D1 or Queues access, so it can't touch the staging or production databases.
 
 ## Local development
 
-Create `worker/.dev.vars` (git-ignored):
+> **During M1** there is no `web/` app, D1 schema or sign-in yet. You only need Cloudflare auth for Workers AI and `pnpm --filter worker dev`; follow [`worker/eval/README.md`](./worker/eval/README.md). The steps below apply from M2.
 
-```ini
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-TOKEN_ENC_KEY=...        # openssl rand -base64 32
-SESSION_SECRET=...       # openssl rand -base64 32
-ALLOWED_EMAILS=you@example.com,partner@example.com
+Local config comes from two git-ignored files. Each has a committed template listing every variable:
+
+| File | Template | Read by | Holds | Needed from |
+| --- | --- | --- | --- | --- |
+| `worker/.env` | [`worker/.env.sample`](./worker/.env.sample) | Wrangler CLI | `CLOUDFLARE_API_TOKEN` (the **dev token**, see [Cloudflare tokens](#cloudflare-tokens)) | M1 |
+| `worker/.dev.vars` | [`worker/.dev.vars.sample`](./worker/.dev.vars.sample) | The local Worker | Google OAuth client, `TOKEN_ENC_KEY`, `SESSION_SECRET`, `ALLOWED_EMAILS` | M2 |
+
+```bash
+cp worker/.env.sample worker/.env
+cp worker/.dev.vars.sample worker/.dev.vars
 ```
+
+Then fill in the values. The secrets guard (deny rules plus `.claude/hooks/protect-secrets.mjs`, shared with Codex) lets agents read and edit `*.sample` / `*.example` templates but never the real files. Staging and production take the same values as Pulumi secrets, not files (see [`infrastructure/README.md`](./infrastructure/README.md)).
 
 ```bash
 pnpm install
 pnpm --filter worker exec wrangler d1 migrations apply expense-local --local
 pnpm --filter web build
-pnpm --filter worker exec wrangler dev
+pnpm --filter worker dev
 ```
 
 App runs at http://localhost:8787 with local D1 and Queues (Miniflare). The top-level `wrangler.jsonc` config is local-only. Workers AI calls go to Cloudflare even in local dev and count against the daily neuron quota.
@@ -117,7 +134,7 @@ App runs at http://localhost:8787 with local D1 and Queues (Miniflare). The top-
 pnpm -r test
 ```
 
-Worker tests run inside the Workers runtime via `@cloudflare/vitest-pool-workers`, with local D1 and Queues.
+Worker tests run inside the Workers runtime via `@cloudflare/vitest-plugin` and never call the real Workers AI.
 
 ## Deployment
 

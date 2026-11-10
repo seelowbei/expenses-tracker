@@ -1,0 +1,18 @@
+{
+  "description": "expenses-tracker project hooks. protect-secrets.mjs is the same script .claude/settings.json binds for Claude Code; Codex selects it via apply_patch (edits) and Bash (all shell tools).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|apply_patch|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/protect-secrets.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking protected files"
+          }
+        ]
+      }
+    ]
+  }
+}

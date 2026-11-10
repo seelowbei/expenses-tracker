@@ -14,7 +14,7 @@ Everything stays on the Cloudflare Workers Free plan: no containers, R2, KV or D
 ## Prerequisites
 
 - Pulumi CLI, `pulumi login` (Pulumi Cloud)
-- `CLOUDFLARE_API_TOKEN` in your shell, with Account: Workers Scripts, D1, Queues edit (plus Zone: Workers Routes edit for a custom domain)
+- `CLOUDFLARE_API_TOKEN` in your shell set to the **provisioning** token (Account: Workers Scripts, D1, Queues edit; plus Zone: Workers Routes edit for a custom domain), not the `wrangler dev` token. See the root README's "Cloudflare tokens".
 - `pnpm install` at the repo root
 
 ## First-time setup

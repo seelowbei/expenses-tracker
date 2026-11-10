@@ -10,6 +10,8 @@
       "Bash(pnpm --filter worker test:*)",
       "Bash(pnpm --filter worker exec tsc:*)",
       "Bash(pnpm --filter worker exec wrangler types:*)",
+      "Bash(pnpm --filter worker types)",
+      "Bash(pnpm --filter worker typecheck)",
       "Bash(pnpm --filter worker bundle)",
       "Bash(pnpm --filter worker exec wrangler d1 migrations apply expense-local --local:*)",
       "Bash(pnpm --filter worker exec wrangler d1 migrations list:*)",
@@ -39,7 +41,41 @@
       "Bash(*--show-secrets*)",
       "Read(./worker/.dev.vars)",
       "Read(./**/.dev.vars)",
-      "Edit(./**/.dev.vars)"
+      "Edit(./**/.dev.vars)",
+      "Read(./**/.dev.vars.local)",
+      "Edit(./**/.dev.vars.local)",
+      "Read(./**/.dev.vars.staging)",
+      "Edit(./**/.dev.vars.staging)",
+      "Read(./**/.dev.vars.production)",
+      "Edit(./**/.dev.vars.production)",
+      "Read(./**/.env)",
+      "Edit(./**/.env)",
+      "Read(./**/.env.local)",
+      "Edit(./**/.env.local)",
+      "Read(./**/.env.*.local)",
+      "Edit(./**/.env.*.local)",
+      "Read(./**/.env.development)",
+      "Edit(./**/.env.development)",
+      "Read(./**/.env.staging)",
+      "Edit(./**/.env.staging)",
+      "Read(./**/.env.production)",
+      "Edit(./**/.env.production)",
+      "Read(./**/.env.test)",
+      "Edit(./**/.env.test)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|MultiEdit|Write|NotebookEdit|Grep|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-secrets.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

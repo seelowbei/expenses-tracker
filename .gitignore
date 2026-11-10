@@ -3,8 +3,17 @@ dist/
 .wrangler/
 .dev.vars
 .dev.vars.*
-!.dev.vars.example
 .env*
+# Committed templates (the secrets hook allows *.example / *.sample too)
+!.dev.vars.example
+!.dev.vars.sample
+!.env.example
+!.env.sample
 coverage/
 .DS_Store
 .claude/settings.local.json
+
+# M1 eval: personal receipts and results never leave the machine
+worker/eval/receipts/*
+!worker/eval/receipts/.gitkeep
+worker/eval/results/

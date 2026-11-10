@@ -1,0 +1,26 @@
+{
+  "name": "worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mkdir -p ../web/dist && wrangler dev",
+    "bundle": "mkdir -p ../web/dist && wrangler deploy --dry-run --outdir dist",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "eval": "tsx eval/run.ts"
+  },
+  "dependencies": {
+    "hono": "4.13.17",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.6.0",
+    "@types/node": "^22.20.5",
+    "sharp": "0.35.5",
+    "tsx": "4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.158.0"
+  }
+}
