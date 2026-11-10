@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { driveFileName, MAX_DIRECT_UPLOAD_BYTES } from "../src/api/receipts";
+import { driveFileName, MAX_DIRECT_UPLOAD_BYTES, STALE_UPLOAD_MS } from "../src/api/receipts";
+import { sha256Hex } from "../src/lib/encoding";
 import { validateSession } from "../src/auth/session";
 import { receipts, users } from "../src/db/schema";
 import { cacheAccessToken, clearAccessTokenCache } from "../src/drive/access";
@@ -124,6 +125,76 @@ describe("POST /api/receipts", () => {
     const rows = await db().select().from(receipts).where(eq(receipts.userId, id));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ status: "queued", driveFileId: "file-retry", error: null });
+  });
+
+  it("uploads a file once when the same file is sent again while its upload is in flight", async () => {
+    const { cookie, id } = await seedUser();
+    let reachedDrive!: () => void;
+    let releaseDrive!: () => void;
+    const atDrive = new Promise<void>((r) => (reachedDrive = r));
+    const google = fakeGoogle({
+      [TOKEN_URL]: refreshOk,
+      [UPLOAD_URL]: async () => {
+        const released = new Promise<void>((r) => (releaseDrive = r));
+        reachedDrive();
+        await released;
+        return uploadOk("file-once")();
+      },
+    });
+    const { request } = makeApp(google);
+    const bytes = unique(JPEG);
+
+    const first = upload(request, cookie, bytes);
+    await atDrive;
+    const second = await upload(request, cookie, bytes);
+    expect(second.status).toBe(409);
+    expect(((await second.json()) as { error: string }).error).toBe("duplicate_receipt");
+
+    releaseDrive();
+    expect((await first).status).toBe(202);
+    expect(google.callsTo(UPLOAD_URL)).toHaveLength(1);
+    const rows = await db().select().from(receipts).where(eq(receipts.userId, id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ status: "queued", driveFileId: "file-once" });
+  });
+
+  it("retries a receipt left in uploading only once the upload is stale", async () => {
+    const { cookie, id } = await seedUser();
+    const google = fakeGoogle({ [TOKEN_URL]: refreshOk, [UPLOAD_URL]: uploadOk("file-stuck") });
+    const { request } = makeApp(google);
+    const bytes = unique(JPEG);
+    const receiptId = crypto.randomUUID();
+    const startedAt = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
+    await db()
+      .insert(receipts)
+      .values({ id: receiptId, userId: id, mimeType: "image/jpeg", sizeBytes: bytes.length, sha256: await sha256Hex(bytes), status: "uploading", createdAt: startedAt(1000) });
+
+    const fresh = await upload(request, cookie, bytes);
+    expect(fresh.status).toBe(409);
+    expect(google.callsTo(UPLOAD_URL)).toHaveLength(0);
+
+    await db().update(receipts).set({ createdAt: startedAt(STALE_UPLOAD_MS + 1000) }).where(eq(receipts.id, receiptId));
+    const stale = await upload(request, cookie, bytes);
+    expect(stale.status).toBe(202);
+    expect(((await stale.json()) as { receipt: { id: string } }).receipt.id).toBe(receiptId);
+    expect(await db().select().from(receipts).where(eq(receipts.id, receiptId)).get()).toMatchObject({ status: "queued", driveFileId: "file-stuck" });
+  });
+
+  it("disconnects Drive when the stored refresh token can't be decrypted", async () => {
+    const { cookie, id, token } = await seedUser();
+    // Well-formed v1 value that no key decrypts (as after a TOKEN_ENC_KEY change).
+    await db().update(users).set({ refreshTokenEnc: `v1:${"A".repeat(16)}:${"A".repeat(22)}==` }).where(eq(users.id, id));
+    const google = fakeGoogle();
+    const { request } = makeApp(google);
+
+    const res = await upload(request, cookie, unique(JPEG));
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: string }).error).toBe("drive_disconnected");
+    expect(google.calls).toHaveLength(0);
+    expect((await db().select().from(users).where(eq(users.id, id)).get())?.driveStatus).toBe("disconnected");
+    expect(await validateSession(db(), token)).toBeNull();
+    const [row] = await db().select().from(receipts).where(eq(receipts.userId, id));
+    expect(row).toMatchObject({ status: "failed", error: "drive_disconnected" });
   });
 
   it("creates the folder when the user has none, and recreates it when Drive says it is gone", async () => {

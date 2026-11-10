@@ -1,12 +1,13 @@
 // Per-user Drive access: access-token cache, refresh, and the disconnect path.
 import { eq } from "drizzle-orm";
 import type { AppDeps } from "../app-env";
-import { decryptToken } from "../auth/crypto";
+import { decryptToken, TokenCryptoError } from "../auth/crypto";
 import { GoogleInvalidGrantError, refreshAccessToken, type GoogleConfig } from "../auth/google";
 import { deleteUserSessions } from "../auth/session";
 import type { Db } from "../db/client";
 import { users, type User } from "../db/schema";
 import type { Bindings } from "../env";
+import { log } from "../lib/log";
 import { DriveError, driveApi, type DriveApi } from "./client";
 
 /** Google no longer accepts this user's grant. Sessions are gone; the user must sign in again. */
@@ -44,7 +45,19 @@ export async function markDisconnected(db: Db, userId: string): Promise<void> {
 
 async function freshToken(env: Bindings, deps: AppDeps, db: Db, user: User): Promise<string> {
   if (!user.refreshTokenEnc || user.driveStatus === "disconnected") throw new DriveDisconnectedError();
-  const refreshToken = await decryptToken(env.TOKEN_ENC_KEY, user.refreshTokenEnc);
+  let refreshToken: string;
+  try {
+    refreshToken = await decryptToken(env.TOKEN_ENC_KEY, user.refreshTokenEnc);
+  } catch (e) {
+    // Unreadable token (TOKEN_ENC_KEY changed, or a corrupt value). Disconnecting is the only way out:
+    // the next sign-in then forces consent and stores a fresh refresh token.
+    if (e instanceof TokenCryptoError) {
+      log("refresh_token_unreadable", { code: e.code });
+      await markDisconnected(db, user.id);
+      throw new DriveDisconnectedError();
+    }
+    throw e;
+  }
   try {
     const { accessToken, expiresIn } = await refreshAccessToken(googleConfig(env, deps), refreshToken);
     cacheAccessToken(user.id, accessToken, expiresIn);

@@ -1,5 +1,5 @@
 // /api/receipts: direct upload to Drive (spec "Key flows" 2) and listing for polling.
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../app-env";
@@ -15,6 +15,8 @@ import { sniffMime, type AllowedMime } from "../lib/sniff";
 /** Direct multipart limit. Larger files need the resumable flow (deferred to M5). */
 export const MAX_DIRECT_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MULTIPART_OVERHEAD = 64 * 1024;
+/** An `uploading` row older than this is treated as abandoned. A ≤ 5 MB Drive upload takes seconds. */
+export const STALE_UPLOAD_MS = 2 * 60 * 1000;
 
 const EXT: Record<AllowedMime, string> = { "image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf" };
 
@@ -78,21 +80,34 @@ receiptRoutes.post("/", async (c) => {
   if (!mime) return c.json({ error: "unsupported_type" }, 415);
   const sha256 = await sha256Hex(bytes);
 
-  // Duplicate check. A row left by a failed Drive upload (no file id) is reused, so it never blocks a retry.
+  // Duplicate check. A row without a Drive file is reused when its upload failed, or when it has been
+  // `uploading` for longer than any real upload takes (the Worker died mid-request), so it never blocks a retry.
   let receipt = await db
     .select()
     .from(receipts)
     .where(and(eq(receipts.userId, user.id), eq(receipts.sha256, sha256)))
     .get();
   if (receipt) {
-    const retryable = !receipt.driveFileId && (receipt.status === "failed" || receipt.status === "uploading");
-    if (!retryable) return c.json({ error: "duplicate_receipt", receiptId: receipt.id }, 409);
-    receipt = await db
+    const now = new Date();
+    const staleBefore = nowIso(new Date(now.getTime() - STALE_UPLOAD_MS));
+    // Claimed in one conditional UPDATE: of two concurrent requests for the same file, only one gets the row,
+    // so Drive never receives a second copy that the write-once rule would leave orphaned.
+    // created_at restarts with the attempt: it is what makes an in-flight upload look fresh, and no Drive file exists yet.
+    const claimed = await db
       .update(receipts)
-      .set({ status: "uploading", error: null, mimeType: mime, sizeBytes: file.size })
-      .where(and(eq(receipts.id, receipt.id), eq(receipts.userId, user.id)))
+      .set({ status: "uploading", error: null, mimeType: mime, sizeBytes: file.size, createdAt: nowIso(now) })
+      .where(
+        and(
+          eq(receipts.id, receipt.id),
+          eq(receipts.userId, user.id),
+          isNull(receipts.driveFileId),
+          or(eq(receipts.status, "failed"), and(eq(receipts.status, "uploading"), lt(receipts.createdAt, staleBefore))),
+        ),
+      )
       .returning()
       .get();
+    if (!claimed) return c.json({ error: "duplicate_receipt", receiptId: receipt.id }, 409);
+    receipt = claimed;
   } else {
     try {
       receipt = await db
