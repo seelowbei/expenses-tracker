@@ -82,6 +82,7 @@ Run typecheck and the relevant tests before calling a change done.
 - Callback rejects emails not in `ALLOWED_EMAILS`.
 - Uploads: allow-list `image/jpeg`, `image/png`, `application/pdf` with magic-byte checks; 10 MB max; server-generated file names.
 - `invalid_grant` / Drive 401 → `drive_status='disconnected'`, delete the user's sessions, keep ledger data.
+- **Drive is write-once:** only create the folder and upload new files. Never delete, trash, overwrite or move Drive files (no `DELETE`/`PATCH`/`PUT` to Drive, no `trashed`). `drive.file` would allow it, so `test/drive-no-delete.test.ts` guards it. Deleting a ledger entry keeps the Drive file.
 - **Logging:** receipt ids, statuses, error codes only. Never log OCR text, amounts, emails or tokens.
 
 **Extraction agent**
