@@ -9,6 +9,7 @@ import { users } from "../db/schema";
 import { cacheAccessToken, ensureFolder, googleConfig } from "../drive/access";
 import { DriveError, driveApi } from "../drive/client";
 import { log } from "../lib/log";
+import { isAllowedEmail } from "./allowlist";
 import { encryptToken, signValue, verifySignedValue } from "./crypto";
 import { authorizationUrl, DRIVE_FILE_SCOPE, exchangeCode, GoogleAuthError, newAuthRequest } from "./google";
 import { checkOrigin } from "./middleware";
@@ -23,15 +24,6 @@ const StatePayload = z.object({
   consent: z.boolean(),
   exp: z.number(),
 });
-
-export function allowedEmails(raw: string): Set<string> {
-  return new Set(
-    raw
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
 
 export const authRoutes = new Hono<AppEnv>();
 
@@ -77,7 +69,7 @@ authRoutes.get("/google/callback", async (c) => {
   }
 
   const email = result.claims.email.toLowerCase();
-  if (!allowedEmails(c.env.ALLOWED_EMAILS).has(email)) return fail("not_allowed");
+  if (!isAllowedEmail(c.env.ALLOWED_EMAILS, email)) return fail("not_allowed");
   // Google's granular consent lets the user untick Drive access.
   if (!result.grantedScopes.includes(DRIVE_FILE_SCOPE)) return fail("drive_scope_missing");
 

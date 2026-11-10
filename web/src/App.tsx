@@ -106,7 +106,7 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           qc.setQueryData(["me"], null);
-          onSignedOut(SIGN_IN_ERRORS[e.code === "drive_disconnected" ? "drive_disconnected" : "auth_expired"]!);
+          onSignedOut(SIGN_IN_ERRORS[e.code === "drive_disconnected" || e.code === "not_allowed" ? e.code : "auth_expired"]!);
           return;
         }
         setState(i, { state: "error", message: uploadMessage(e) });

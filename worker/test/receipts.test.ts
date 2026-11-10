@@ -27,8 +27,12 @@ function form(bytes: Uint8Array, name = "r.jpg") {
 const refreshOk = () => json({ access_token: "at-refreshed", expires_in: 3599, token_type: "Bearer" });
 const uploadOk = (id = "file-1") => () => json({ id, webViewLink: `https://drive.google.com/file/d/${id}/view` });
 
-function upload(request: ReturnType<typeof makeApp>["request"], cookie: string, bytes: Uint8Array, extra: HeadersInit = {}) {
-  return request("/api/receipts", { method: "POST", body: form(bytes), headers: { Cookie: cookie, Origin: ORIGIN, ...extra } });
+/** Sends the multipart body the way a browser does: serialized, with Content-Type and Content-Length. */
+async function upload(request: ReturnType<typeof makeApp>["request"], cookie: string, bytes: Uint8Array, extra: Record<string, string> = {}) {
+  const encoded = new Request("http://localhost/", { method: "POST", body: form(bytes) });
+  const body = new Uint8Array(await encoded.arrayBuffer());
+  const headers = { Cookie: cookie, Origin: ORIGIN, "Content-Type": encoded.headers.get("Content-Type")!, "Content-Length": String(body.length), ...extra };
+  return request("/api/receipts", { method: "POST", body, headers });
 }
 
 describe("POST /api/receipts", () => {
@@ -98,7 +102,11 @@ describe("POST /api/receipts", () => {
     expect(gif.status).toBe(415);
     expect(await gif.json()).toEqual({ error: "unsupported_type" });
     expect((await upload(request, cookie, new Uint8Array())).status).toBe(400);
-    expect((await request("/api/receipts", { method: "POST", body: "x", headers: { Cookie: cookie, Origin: ORIGIN } })).status).toBe(400);
+    expect((await request("/api/receipts", { method: "POST", body: "x", headers: { Cookie: cookie, Origin: ORIGIN, "Content-Length": "1" } })).status).toBe(400);
+    // No Content-Length (a chunked body): rejected before anything is buffered.
+    const chunked = await request("/api/receipts", { method: "POST", body: form(unique(JPEG)), headers: { Cookie: cookie, Origin: ORIGIN } });
+    expect(chunked.status).toBe(411);
+    expect(await chunked.json()).toEqual({ error: "length_required" });
 
     const big = new Uint8Array(MAX_DIRECT_UPLOAD_BYTES + 1);
     big.set(JPEG);

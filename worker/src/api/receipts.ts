@@ -61,7 +61,11 @@ receiptRoutes.post("/", async (c) => {
   const user = c.var.user;
   if (user.driveStatus === "disconnected") return c.json({ error: "drive_disconnected" }, 409);
 
-  const declared = Number(c.req.header("Content-Length") ?? "0");
+  // Checked before formData() buffers the body. Browsers always send Content-Length with a FormData body;
+  // without it (chunked), nothing would stop a body far beyond the limit from being buffered.
+  const lengthHeader = c.req.header("Content-Length");
+  const declared = lengthHeader === undefined ? NaN : Number(lengthHeader);
+  if (!Number.isSafeInteger(declared) || declared < 0) return c.json({ error: "length_required" }, 411);
   if (declared > MAX_DIRECT_UPLOAD_BYTES + MULTIPART_OVERHEAD) return c.json({ error: "file_too_large" }, 413);
 
   let form: FormData;
@@ -123,14 +127,15 @@ receiptRoutes.post("/", async (c) => {
         })
         .returning()
         .get();
-    } catch {
-      // Lost a race with an identical concurrent upload (UNIQUE user_id, sha256).
+    } catch (e) {
+      // Lost a race with an identical concurrent upload (UNIQUE user_id, sha256). Anything else is a real D1 error.
       const other = await db
         .select({ id: receipts.id })
         .from(receipts)
         .where(and(eq(receipts.userId, user.id), eq(receipts.sha256, sha256)))
         .get();
-      return c.json({ error: "duplicate_receipt", receiptId: other?.id ?? null }, 409);
+      if (!other) throw e;
+      return c.json({ error: "duplicate_receipt", receiptId: other.id }, 409);
     }
   }
   const r = receipt!;

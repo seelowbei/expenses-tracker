@@ -207,6 +207,16 @@ describe("GET /api/me", () => {
     expect(id).toBeTruthy();
   });
 
+  it("ends the sessions of an account removed from ALLOWED_EMAILS", async () => {
+    const { cookie, token } = await seedUser({ email: "carol@example.com" });
+    const { request } = makeApp();
+    const res = await request("/api/me", { headers: { Cookie: cookie } });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "not_allowed" });
+    expect(setCookies(res).get("session")).toMatch(/Max-Age=0/);
+    expect(await validateSession(db(), token)).toBeNull();
+  });
+
   it("is 401 without a session", async () => {
     const { request } = makeApp();
     expect((await request("/api/me")).status).toBe(401);
