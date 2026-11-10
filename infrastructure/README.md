@@ -54,7 +54,7 @@ pulumi config set zoneId <zone-id> -s production
 
 ## Deploying services
 
-CI does this on push to `main` (staging) and on tags `v*` (production). To run it by hand:
+CI (`.github/workflows/deploy.yml`) does this after the CI checks pass: every merge to `main` deploys **staging**; publishing a GitHub release with a `v*` tag on `main` deploys **production** (prereleases are skipped). To roll production back, re-run the Deploy run of an earlier release. To run it by hand:
 
 ```bash
 pnpm --filter web build        # -> web/dist

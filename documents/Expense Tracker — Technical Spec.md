@@ -389,8 +389,8 @@ expense-tracker/
 | Env | URL | D1 | Queue | Google OAuth client | Provisioned by | Deploy trigger |
 | --- | --- | --- | --- | --- | --- | --- |
 | local | `localhost:8787` | Local SQLite (Miniflare) | Local | Dev client, redirect to localhost | — | `wrangler dev` |
-| staging | `expense-tracker-staging.<sub>.workers.dev` | `expense-staging` | `receipts-staging` | Dev client | Pulumi stacks `staging` | Push to `main` |
-| production | Custom domain, or `expense-tracker-production.<sub>.workers.dev` | `expense-production` | `receipts-production` | Prod client | Pulumi stacks `production` | Git tag `v*` |
+| staging | `expense-tracker-staging.<sub>.workers.dev` | `expense-staging` | `receipts-staging` | Dev client | Pulumi stacks `staging` | Merge (push) to `main` |
+| production | Custom domain, or `expense-tracker-production.<sub>.workers.dev` | `expense-production` | `receipts-production` | Prod client | Pulumi stacks `production` | Published GitHub release, tag `v*` on `main` |
 
 **Pulumi projects**
 
@@ -449,9 +449,12 @@ Wrangler is no longer the deployment source. It runs local dev, bundles the Work
 
 **CI/CD (`.github/workflows/deploy.yml`)**
 
+Nov 10, 2026: production deploys when a GitHub release is published (not on a bare tag push); the tag must be `v*` and point at a commit on `main`, and prereleases are skipped. The workflow calls `ci.yml` (typecheck + tests) as its first job. Abridged sketch:
+
 ```yaml
 on:
-  push: { branches: [main], tags: ['v*'] }
+  push: { branches: [main] }
+  release: { types: [published] }
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -467,7 +470,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r test
       - name: Set env
-        run: echo "STACK=$([[ $GITHUB_REF == refs/tags/* ]] && echo production || echo staging)" >> $GITHUB_ENV
+        run: echo "STACK=$([[ $GITHUB_EVENT_NAME == release ]] && echo production || echo staging)" >> $GITHUB_ENV
       - name: Build
         run: |
           pnpm --filter web build
@@ -487,7 +490,7 @@ jobs:
 
 **Migration rule:** additive only (new tables, nullable columns) in the same release as the code, because the migration runs before the new code is live. Drop or rename only in a later release. Use `wrangler d1 time-travel` to restore D1 to a point in time if a migration goes wrong.
 
-**Rollback:** re-run the workflow for the previous tag (or revert on `main` for staging); Pulumi redeploys that build. In an emergency, `wrangler rollback --name expense-tracker-<env>` reverts within seconds, then the next `pulumi up` restores Pulumi as the source of truth. The D1 schema stays forward-compatible thanks to the additive rule.
+**Rollback:** re-run the Deploy run of the previous release (or revert on `main` for staging); Pulumi redeploys that build. In an emergency, `wrangler rollback --name expense-tracker-<env>` reverts within seconds, then the next `pulumi up` restores Pulumi as the source of truth. The D1 schema stays forward-compatible thanks to the additive rule.
 
 ## Risks, open questions & milestones
 
