@@ -99,7 +99,7 @@ CREATE TABLE receipts (
   status         TEXT NOT NULL,              -- uploading | queued | processing | done | needs_review | failed
   attempts       INTEGER NOT NULL DEFAULT 0,
   error          TEXT,
-  raw_extraction TEXT,                       -- JSON from the agent, for audit
+  raw_extraction TEXT,                       -- parsed Extraction JSON (after normalisation, before user edits): audit + accuracy
   created_at     TEXT NOT NULL,
   UNIQUE (user_id, sha256)
 );
@@ -263,7 +263,13 @@ const Extraction = z.object({
 
 **Evaluation before launch**
 
-Build a 50-receipt test set (local receipts, mixed images and PDFs, a few crumpled or faded) with hand-labelled JSON. Labels include `txn_time` (`null` when none is printed). Track per-field accuracy (including time), category accuracy, repair rate and neurons per receipt. Target at least 90% on total and date; time is reported but has no target. If the model misses the target, fall back to an external vision model via AI Gateway on `needs_review` cases only.
+The plan was a 50-receipt test set (local receipts, mixed images and PDFs, a few crumpled or faded) with hand-labelled JSON. Labels include `txn_time` (`null` when none is printed). Track per-field accuracy (including time), category accuracy, repair rate and neurons per receipt. Target at least 90% on total and date; time is reported but has no target. If the model misses the target, fall back to an external vision model via AI Gateway on `needs_review` cases only.
+
+**Decision (Nov 10, 2026): provisional go on 10 receipts.** Only 10 local receipts were available. The eval passed (date 90%, total 90%, about 43 neurons per receipt; details in `documents/M1 eval results.md`), but at that size the result is weak evidence. So:
+
+- The 10 labelled receipts are kept as a regression set; re-run the eval after every prompt, schema or normalisation change.
+- Real accuracy comes from the users' own corrections once M3/M4 exist. `receipts.raw_extraction` keeps the parsed extraction, and `ledger_entries` holds the final values, so a per-field comparison (merchant, date, time, total, tax, currency, category) for entries with `source` `ai` or `ai_edited` gives the edit rate per field. Count only entries the user has seen: a wrong value in an unreviewed `done` entry is not yet a correction.
+- The AI Gateway fallback is decided from that edit rate, not from the 10-receipt eval.
 
 First M1 measurement (one digital Kopitiam receipt, after the prompt fixes): 1 call, 6,831 input + 106 output tokens, ~37 neurons, 4.2 s, all fields correct. The image accounts for almost all input tokens.
 
@@ -475,7 +481,7 @@ The biggest risk is extraction accuracy from the free open-source vision model. 
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Vision model accuracy too low on local receipts | Users fix most entries by hand | 50-receipt eval first; `needs_review` flow; optional external model via AI Gateway |
+| Vision model accuracy too low on local receipts | Users fix most entries by hand | 10-receipt regression eval; per-field edit rate from user corrections; `needs_review` flow; optional external model via AI Gateway |
 | Neuron cost per receipt higher than estimated | Free cap at fewer than 100 receipts/day | Measure in M1; track daily from `ai_usage`; cut repair calls with a stricter prompt; resize images harder; upgrade to Paid ($5) |
 | Free-plan CPU (10 ms) exceeded on upload | Error 1101 / failed uploads | Client-side resize; resumable upload straight to Drive for large files |
 | OAuth app left in Testing mode | Max 100 test users; 7-day refresh-token expiry in Testing mode | Publish as In production (non-sensitive scopes need no verification); email allow-list limits sign-in to the two users |
@@ -492,7 +498,7 @@ The biggest risk is extraction accuracy from the free open-source vision model. 
 
 **Milestones**
 
-1. **M1 — Extraction spike:** Worker + Workers AI only, extract `txn_time` too, run the 50-receipt eval, record accuracy (including time) and neurons per receipt from the model's token usage.
+1. **M1 — Extraction spike:** Worker + Workers AI only, extract `txn_time` too, run the eval, record accuracy (including time) and neurons per receipt from the model's token usage. Done provisionally on 10 receipts (see "Evaluation before launch").
 2. **M2 — Auth + Drive:** Google sign-in, encrypted refresh tokens, folder creation, upload to Drive.
 3. **M3 — Pipeline:** Queue consumer, validation, ledger writes (including `txn_time`), `ai_usage` rows for every AI call, retries/DLQ, status polling.
 4. **M4 — Ledger UI:** category/month views (entries ordered by date and time), review and edit including time, categories, delete.

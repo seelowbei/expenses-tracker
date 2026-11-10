@@ -8,7 +8,7 @@ Receipt-to-ledger expense tracker for two users on the **Cloudflare Workers Free
 
 The design is in `documents/Expense Tracker — Technical Spec.md`. Read the relevant section before implementing anything; it defines the schema, flows, API, prompt, Zod schema and failure handling. If the code and spec disagree, stop and ask rather than silently picking one.
 
-**Status:** M1 (extraction spike) in progress: `worker/src/agent/` and the eval in `worker/eval/` exist; the eval has not been run yet. Do not build M2+ features unless asked.
+**Status:** M1 (extraction spike) done provisionally: the eval passes on 10 local receipts (`documents/M1 eval results.md`), which stay as a regression set; re-run `pnpm --filter worker eval` after any change in `src/agent/`. Real accuracy will come from user corrections (spec, "Evaluation before launch"). Do not build M2+ features unless asked.
 
 ## Layout
 
