@@ -25,7 +25,8 @@
     ]
   },
   // Daily re-send of parked receipts (src/pipeline/timing.ts PARK_CRON); also in infrastructure/services.
-  // Fire locally with `curl "http://localhost:8787/__scheduled?cron=5+0+*+*+*"` (dev runs --test-scheduled).
+  // Fire locally with `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=5+0+*+*+*"`
+  // (`/__scheduled` is served by the SPA assets, which run before the Worker for that path).
   "triggers": { "crons": ["5 0 * * *"] },
   // Local only. DEV_ROUTES enables /api/dev/* (M1 extraction spike); Pulumi never sets it.
   "vars": { "APP_ORIGIN": "http://localhost:8787", "DEFAULT_CURRENCY": "SGD", "DEV_ROUTES": "true" },

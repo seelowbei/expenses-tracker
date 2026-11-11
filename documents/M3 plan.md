@@ -51,7 +51,7 @@ Nov 11, 2026. Scope from the spec's milestones: queue consumer, validation, ledg
 **Cron (`scheduled`, `5 0 * * *`)**
 - Selects `queued` rows with `retry_after <= now` (all users; this is a system job, not a request path). It sends them with `sendBatch` (≤ 100 per call) and clears `retry_after` only for rows whose send succeeded. Then the `processing_timeout` sweep (decision 1).
 - `triggers.crons` goes in `wrangler.jsonc`, and the cron trigger resource goes in `infrastructure/services/index.ts` (check the resource name in the installed `@pulumi/cloudflare` version). Then `pnpm --filter worker types`.
-- Local: the `dev` script gets `--test-scheduled`, so `curl "http://localhost:8787/__scheduled?cron=5+0+*+*+*"` fires it.
+- Local: the `dev` script gets `--test-scheduled`; `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=5+0+*+*+*"` fires it (`/__scheduled` is caught by the SPA assets).
 
 **API changes:** `ReceiptDto` gains `retryAfter` and `reviewReasons`. New `POST /api/receipts/:id/retry` (decision 3), behind the Origin check, scoped by session `user_id`.
 
@@ -68,8 +68,10 @@ Nov 11, 2026. Scope from the spec's milestones: queue consumer, validation, ledg
 5. **Enqueue + retry route.** Send on upload, park on send failure, `POST /api/receipts/:id/retry`. Tests (fake queue binding).
 6. **Cron.** `scheduled` handler: re-send parked rows, sweep `processing` > 1 h. `wrangler.jsonc` trigger, Pulumi cron resource, `types`, `--test-scheduled`. Tests; `pnpm --filter "./infrastructure/*" typecheck`; `pulumi preview -s staging` if you're logged in.
 7. **Web.** Polling, status labels, parked message, Retry button. `pnpm --filter web build`.
-8. **Manual check (you).** `pnpm --filter worker dev`, upload a photo, a text PDF and a scanned PDF in Chrome, watch the statuses change, then inspect `ledger_entries` / `ai_usage` with `wrangler d1 execute expense-local --local`. Set `retry_after` on a `queued` row to the past and fire `/__scheduled`.
+8. **Manual check (you).** `pnpm --filter worker dev`, upload a photo, a text PDF and a scanned PDF in Chrome, watch the statuses change, then inspect `ledger_entries` / `ai_usage` with `wrangler d1 execute expense-local --local`. Set `retry_after` on a `queued` row to the past and fire `/cdn-cgi/handler/scheduled`.
 9. **Docs.** AGENTS.md status + layout (`src/pipeline/`), spec revisions for decisions 1–4 and remove the M3 items from "Spec revisions not yet in code", README notes for the local cron.
+
+**Build status (Nov 11, 2026):** tasks 1–7 and 9 done on `m3/pipeline`, one commit each. 163 worker tests pass; worker, web and infrastructure typecheck; web builds. Locally checked: the app loads and the cron endpoint runs (`park_cron` logged, nothing due). Added along the way: the cron also re-sends receipts `queued` for longer than the queue's 24 h retention, which covers uploads made during M2 (they were never sent) and any lost message; a receipt whose Drive file was deleted can be uploaded again into the same row; the SPA stops polling after 15 minutes without a change. **Task 8 (manual check) is still open**, and so is the eval re-run after the `src/agent/` change (failure path only; prompts and parsing of valid replies are unchanged).
 
 After merge (staging deploy via CI): make sure migration `0002` reaches staging before the new code runs (by the deploy workflow if it applies migrations, otherwise by you: `--remote` D1 is denied to agents), and check consumer CPU time in Workers observability.
 

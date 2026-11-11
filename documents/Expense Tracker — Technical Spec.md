@@ -4,6 +4,7 @@ Nov 9, 2026 · @Celine Low
 
 **Revisions**
 
+- Nov 11, 2026 (M3): the consumer itself sets `failed` on the last delivery (no DLQ consumer; the DLQ only catches crashed Workers, and the daily cron fails receipts left in `processing` for over an hour); post-validation reasons are stored in `receipts.review_reasons`; `POST /api/receipts/:id/retry` ships in M3; a failed queue send at upload parks the receipt for the cron; the cron also re-sends receipts queued longer than the queue's 24 h retention; a receipt whose Drive file was deleted can be uploaded again.
 - Nov 10, 2026 (M2): OAuth uses `oauth4webapi` instead of `arctic`, which npm marks as no longer supported; logout deletes all of the user's sessions; the resumable upload for files over 5 MB is deferred to M5 (until then `413 file_too_large`); the app never deletes, trashes or overwrites Drive files, so deleting a ledger entry keeps its file (was: optional `files.delete`).
 - Nov 10, 2026: capture the transaction time when the receipt prints one (`txn_time`); record Workers AI usage (tokens, estimated neurons) per model call in a new `ai_usage` table; extraction prompt and post-validation updated from the first M1 runs.
 
@@ -189,7 +190,7 @@ Uploads return as soon as the file is saved to Drive and queued. Extraction then
 6. Valid: insert `ledger_entries` (`source='ai'`). Status is `done` when post-validation finds no review reason, otherwise `needs_review` (see "Post-validation rules").
 7. Still invalid after the repair call: insert **no** ledger entry. Store the fields that did parse in `receipts.raw_extraction`, set status `needs_review` and `error='invalid_output'`, and ack the message. The review form is pre-filled from those fields (in the M1 eval, only the date was unreadable), and the entry is created with `source='ai_edited'` when the user saves.
 8. Workers AI quota exhausted: park the receipt and ack the message; it does not use a queue retry (see "When a limit is hit").
-9. Any other error (Drive, other Workers AI errors): `msg.retry({ delaySeconds })` with backoff; after 3 attempts the message goes to the DLQ and status becomes `failed`.
+9. Any other error (Drive 429/5xx, other Workers AI errors): status back to `queued` with the error code, and `msg.retry({ delaySeconds })` with backoff of 30 s, 2 min, 10 min. On the last delivery (after 3 retries, `max_retries: 3`) the consumer sets `failed` and acks. Errors a retry can't fix fail at once: `unsupported_scanned_pdf`, `pdf_conversion_failed`, `drive_file_missing` (the user deleted the file; uploading it again reuses the row), `drive_disconnected`. The DLQ only receives messages whose Worker crashed; the daily cron marks receipts still `processing` an hour after upload as `failed` (`processing_timeout`).
 10. Every Workers AI call in steps 3–5 writes one `ai_usage` row, whatever the outcome (including quota and invalid-output failures). Rows are written in the same D1 `batch()` as the receipt's status update, so usage is never lost when a later step fails.
 
 **4. Review and ledger**
@@ -301,7 +302,7 @@ All `/api/*` routes need a valid session cookie and are scoped to the session's 
 | POST | `/api/receipts/resumable` | Start Drive resumable upload (> 5 MB) | 200 `{ receiptId, uploadUrl }` |
 | POST | `/api/receipts/:id/complete` | Confirm resumable upload, enqueue | 202 |
 | GET | `/api/receipts?status=` | List receipts (for polling) | 200 |
-| POST | `/api/receipts/:id/retry` | Re-enqueue a failed receipt | 202 |
+| POST | `/api/receipts/:id/retry` | Re-enqueue a failed receipt that still has its Drive file | 202 / 409 `not_retryable` / 409 `reupload_required` |
 | GET | `/api/ledger?from=&to=&category=` | Entries + totals by category/month | 200 |
 | PATCH | `/api/ledger/:id` | Edit fields / category | 200 |
 | DELETE | `/api/ledger/:id` | Delete entry (the Drive file is kept) | 204 |
@@ -354,7 +355,8 @@ Expected cost is $0/month. Workers AI's 10,000 neurons/day is the cap that will 
 | --- | --- |
 | Workers AI quota exhausted | Consumer catches the error, acks the message, and parks the receipt in D1: status `queued`, `retry_after` = next 00:05 UTC. The daily Cron Trigger (`5 0 * * *`, the `scheduled` handler) re-sends every parked receipt whose `retry_after` has passed to `RECEIPT_QUEUE` and clears `retry_after`. Queue retries are not used for this: on the Free plan, messages are kept for a fixed 24 h, delays max out at 24 h, and each retry counts toward `max_retries`. The UI shows "waiting for tomorrow's AI quota (after 08:00 SGT)". |
 | Drive 401 / `invalid_grant` | `drive_status='disconnected'`, receipt `failed`, UI prompts to reconnect |
-| Drive 429 / 5xx | Retry with backoff of 30 s, 2 min, 10 min, then DLQ |
+| Drive 429 / 5xx | Retry with backoff of 30 s, 2 min, 10 min, then `failed` (the consumer sets it on the last delivery) |
+| Queue send fails at upload (e.g. Queues daily ops) | The file is already in Drive, so the receipt is parked like an AI-quota park (`error='queue_unavailable'`) and the upload still returns `202`; the cron sends it. The cron also re-sends any receipt `queued` for longer than the queue's 24 h retention. |
 | Invalid LLM JSON twice | No ledger entry. Receipt `needs_review` with `error='invalid_output'`; the review form is pre-filled from the fields that did parse, and the entry is created when the user saves. `ledger_entries` keeps its `NOT NULL` columns. |
 | Error 1027 (daily requests) | SPA shows a "service busy, try later" banner; uploads are not lost because the browser keeps the file until a 202 |
 

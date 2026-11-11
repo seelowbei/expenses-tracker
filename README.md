@@ -8,13 +8,13 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
 ## Status
 
-**M2 (sign-in + Drive upload) done**, verified locally with real Google accounts; not deployed to staging yet. M1 passed provisionally on 10 receipts ([`documents/M1 eval results.md`](./documents/M1%20eval%20results.md)). M2 adds Google sign-in, encrypted refresh tokens, the `Expense Receipts` Drive folder, uploads and the first D1 migrations ([`documents/M2 plan.md`](./documents/M2%20plan.md)). Work follows the spec's milestones:
+**M3 (pipeline) built** on `m3/pipeline`, manual check pending ([`documents/M3 plan.md`](./documents/M3%20plan.md)). **M2 (sign-in + Drive upload) done**, verified locally with real Google accounts. M1 passed provisionally on 10 receipts ([`documents/M1 eval results.md`](./documents/M1%20eval%20results.md)). M2 adds Google sign-in, encrypted refresh tokens, the `Expense Receipts` Drive folder, uploads and the first D1 migrations ([`documents/M2 plan.md`](./documents/M2%20plan.md)). Work follows the spec's milestones:
 
 | Milestone | Scope |
 | --- | --- |
 | M1 — Extraction spike | Worker + Workers AI only; 50-receipt eval; record accuracy and neurons/receipt |
-| **M2 — Auth + Drive** | Google sign-in, encrypted refresh tokens, Drive folder, upload |
-| M3 — Pipeline | Queue consumer, Zod validation, ledger writes, retries/DLQ, status polling |
+| M2 — Auth + Drive | Google sign-in, encrypted refresh tokens, Drive folder, upload |
+| **M3 — Pipeline** | Queue consumer, Zod validation, ledger writes, `ai_usage`, retries, quota parking (daily cron), status polling |
 | M4 — Ledger UI | Category/month views, review & edit, categories, delete |
 | M5 — Hardening & prod | CI/CD, prod env, limit banners, privacy policy, OAuth consent published |
 
@@ -23,7 +23,7 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 | Layer | Choice |
 | --- | --- |
 | Frontend | Vite + React + TypeScript, TanStack Query, Tailwind (static assets) |
-| API | Hono on a single Cloudflare Worker (`fetch` + `queue` handlers) |
+| API | Hono on a single Cloudflare Worker (`fetch` + `queue` + `scheduled` handlers) |
 | Auth | `oauth4webapi` (Google OIDC + PKCE), own `sessions` table |
 | Database | Cloudflare D1 + Drizzle ORM |
 | Async jobs | Cloudflare Queues (producer + consumer in the same Worker), DLQ |
@@ -128,7 +128,7 @@ pnpm --filter worker dev
 
 Use Chrome or Firefox locally: the session cookie is `Secure`, which Safari may drop on `http://localhost`. Schema changes: edit `worker/src/db/schema.ts`, run `pnpm --filter worker db:generate`, check the SQL in `worker/migrations/` is additive, then migrate.
 
-App runs at http://localhost:8787 with local D1 and Queues (Miniflare). The top-level `wrangler.jsonc` config is local-only. Workers AI calls go to Cloudflare even in local dev and count against the daily neuron quota.
+App runs at http://localhost:8787 with local D1 and Queues (Miniflare). Uploads are extracted by the local queue consumer. The daily cron (re-sends parked receipts and ones queued for over 24 h) doesn't run on its own locally; fire it with `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=5+0+*+*+*"`. The top-level `wrangler.jsonc` config is local-only. Workers AI calls go to Cloudflare even in local dev and count against the daily neuron quota.
 
 ## Tests
 
