@@ -68,4 +68,17 @@ describe("runParkCron", () => {
     expect(await row(stuck)).toMatchObject({ status: "failed", error: "processing_timeout" });
     expect(await row(fresh)).toMatchObject({ status: "processing" });
   });
+
+  it("re-sends orphaned receipts queued for longer than the queue keeps messages", async () => {
+    const a = await seedUser();
+    const orphan = await receipt(a.id, { createdAt: "2026-11-10T23:00:00.000Z" });
+    const recent = await receipt(a.id, { createdAt: "2026-11-11T09:00:00.000Z" });
+    const noFile = await receipt(a.id, { createdAt: "2026-11-01T00:00:00.000Z", driveFileId: null });
+    const q = fakeQueue();
+    await runParkCron(db(), q.queue, NOW);
+    const ids = q.sent.map((m) => m.receiptId);
+    expect(ids).toContain(orphan);
+    expect(ids).not.toContain(recent);
+    expect(ids).not.toContain(noFile);
+  });
 });

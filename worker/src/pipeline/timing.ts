@@ -22,3 +22,6 @@ export function nextParkTime(now: Date): string {
 
 /** A receipt still `processing` after this is treated as crashed (the message died in the DLQ). */
 export const PROCESSING_TIMEOUT_MS = 60 * 60 * 1000;
+
+/** Queues keep messages for a fixed 24 h on the Free plan; a receipt queued longer has no message left. */
+export const QUEUE_RETENTION_MS = 24 * 60 * 60 * 1000;

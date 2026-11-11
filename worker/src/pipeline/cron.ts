@@ -1,11 +1,11 @@
-// `scheduled` handler (daily, PARK_CRON): sweep crashed receipts, then re-send parked ones.
+// `scheduled` handler (daily, PARK_CRON): sweep crashed receipts, then re-send parked and orphaned ones.
 // A system job over all users: every write is still scoped by receipt id and user id.
-import { and, eq, inArray, isNotNull, lt, lte } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { receipts } from "../db/schema";
 import { log } from "../lib/log";
 import type { ReceiptMessage } from "./message";
-import { nextParkTime, PROCESSING_TIMEOUT_MS } from "./timing";
+import { nextParkTime, PROCESSING_TIMEOUT_MS, QUEUE_RETENTION_MS } from "./timing";
 
 /** Queue sendBatch takes up to 100 messages; D1 binds up to 100 parameters, so ids go 50 at a time. */
 const CHUNK = 50;
@@ -29,11 +29,20 @@ export async function runParkCron(db: Db, queue: Queue<ReceiptMessage>, now = ne
     .where(and(eq(receipts.status, "processing"), lt(receipts.createdAt, new Date(now.getTime() - PROCESSING_TIMEOUT_MS).toISOString())))
     .returning({ id: receipts.id });
 
-  // 2. Parked receipts whose time has come.
+  // 2. Parked receipts whose time has come, and orphans: queued for longer than the queue keeps messages
+  //    (uploads from before M3 sent anything, or a message lost some other way).
   const due = await db
     .select({ id: receipts.id, userId: receipts.userId })
     .from(receipts)
-    .where(and(eq(receipts.status, "queued"), isNotNull(receipts.retryAfter), lte(receipts.retryAfter, now.toISOString())))
+    .where(
+      and(
+        eq(receipts.status, "queued"),
+        or(
+          and(isNotNull(receipts.retryAfter), lte(receipts.retryAfter, now.toISOString())),
+          and(isNull(receipts.retryAfter), isNotNull(receipts.driveFileId), lt(receipts.createdAt, new Date(now.getTime() - QUEUE_RETENTION_MS).toISOString())),
+        ),
+      ),
+    )
     .orderBy(receipts.retryAfter)
     .limit(MAX_PER_RUN);
 
