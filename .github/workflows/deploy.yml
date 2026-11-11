@@ -8,7 +8,8 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    # TEMP: ci/deploy-workflow deploys staging to test this PR before merge. Remove before merging.
+    branches: [main, ci/deploy-workflow]
   release:
     types: [published]
   workflow_dispatch:
@@ -26,7 +27,8 @@ jobs:
       (github.event_name == 'release'
         && startsWith(github.event.release.tag_name, 'v')
         && !github.event.release.prerelease)
-      || (github.event_name != 'release' && github.ref == 'refs/heads/main')
+      || (github.event_name != 'release'
+        && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci/deploy-workflow'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
