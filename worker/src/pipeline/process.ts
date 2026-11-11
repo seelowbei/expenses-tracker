@@ -37,7 +37,8 @@ export type PipelineError =
   | "drive_file_missing"
   | "drive_unavailable"
   | "drive_error"
-  | "internal_error";
+  | "internal_error"
+  | "queue_unavailable";
 
 const ACK: Outcome = { action: "ack" };
 const LOCALE = "en-SG";

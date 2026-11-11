@@ -6,6 +6,7 @@ import { createSession } from "../src/auth/session";
 import { getDb, nowIso } from "../src/db/client";
 import { users } from "../src/db/schema";
 import type { Bindings } from "../src/env";
+import type { ReceiptMessage } from "../src/pipeline/message";
 import { createApp } from "../src/index";
 import { toBase64Url } from "../src/lib/encoding";
 
@@ -65,10 +66,27 @@ export function tokenResponse(opts: { sub: string; email: string; refreshToken?:
   });
 }
 
-export function makeApp(fake = fakeGoogle()) {
+/** A RECEIPT_QUEUE stand-in that records sends, or throws when `failing` is set. */
+export function fakeQueue() {
+  const sent: ReceiptMessage[] = [];
+  const state = { failing: false };
+  const queue = {
+    async send(body: ReceiptMessage) {
+      if (state.failing) throw new Error("Queue send failed: too many requests");
+      sent.push(body);
+    },
+    async sendBatch(messages: Iterable<{ body: ReceiptMessage }>) {
+      if (state.failing) throw new Error("Queue send failed: too many requests");
+      for (const m of messages) sent.push(m.body);
+    },
+  } as unknown as Queue<ReceiptMessage>; // only send/sendBatch are used
+  return { queue, sent, state };
+}
+
+export function makeApp(fake = fakeGoogle(), queue = fakeQueue()) {
   const app = createApp({ fetch: fake.fetch });
-  const request = (path: string, init: RequestInit = {}) => app.request(path, init, env);
-  return { app, fake, request };
+  const request = (path: string, init: RequestInit = {}) => app.request(path, init, bindings({ RECEIPT_QUEUE: queue.queue }));
+  return { app, fake, request, queue };
 }
 
 export const db = () => getDb(env.DB);
@@ -78,8 +96,8 @@ export const db = () => getDb(env.DB);
 export const bindings = (overrides: Partial<Bindings> = {}): Bindings => ({ ...(env as unknown as Bindings), ...overrides });
 
 /** Runs app requests against the test env with some bindings replaced. */
-export function requestWithEnv(app: ReturnType<typeof makeApp>["app"], overrides: Partial<typeof env>) {
-  const patched = { ...env, ...overrides };
+export function requestWithEnv(app: ReturnType<typeof makeApp>["app"], overrides: Partial<Bindings>) {
+  const patched = bindings({ RECEIPT_QUEUE: fakeQueue().queue, ...overrides });
   return (path: string, init: RequestInit = {}) => app.request(path, init, patched);
 }
 
