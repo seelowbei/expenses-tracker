@@ -5,7 +5,7 @@ Pulumi (TypeScript) for the **staging** and **production** environments. State l
 | Project | Folder | Provisions | Applied by |
 | --- | --- | --- | --- |
 | `expense-foundation` | [`foundation/`](./foundation) | D1 database `expense-<env>` (protected), queues `receipts-<env>` and `receipts-<env>-dlq` | You, manually, when it changes |
-| `expense-services` | [`services/`](./services) | Worker `expense-tracker-<env>`: bundle + `web/dist` assets, bindings and secrets, queue consumer, workers.dev or custom domain | CI on every deploy |
+| `expense-services` | [`services/`](./services) | Worker `expense-tracker-staging` / `expense-tracker` (production): bundle + `web/dist` assets, bindings and secrets, queue consumer, workers.dev or custom domain | CI on every deploy |
 
 Both projects have the stacks `staging` and `production`. `services` reads `foundation` outputs through a `StackReference` to the stack with the same name.
 
@@ -71,4 +71,4 @@ The program stops with a clear error if `worker/dist/index.js` or `web/dist` is 
 - **Pulumi is the source of truth for deployed bindings.** `worker/wrangler.jsonc` is only for local dev, bundling and remote migrations. If you add a binding, add it in both places.
 - **Keep `compatibilityDate` in sync** between `services` config and `wrangler.jsonc`.
 - **Secrets go in Pulumi config with `--secret`.** Never commit them in plain text or use `wrangler secret put` against deployed Workers; the next `pulumi up` would overwrite them.
-- **Emergency rollback:** `wrangler rollback --name expense-tracker-<env>`, then redeploy a known-good commit through CI so Pulumi state matches again.
+- **Emergency rollback:** `wrangler rollback --name <worker>` (`expense-tracker-staging` or `expense-tracker`), then redeploy a known-good commit through CI so Pulumi state matches again.

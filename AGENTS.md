@@ -29,7 +29,7 @@ infrastructure/services/    Pulumi: Worker script, assets, bindings, secrets, qu
 
 pnpm workspace: `web`, `worker`, `infrastructure/*`.
 
-**Environments:** `local` (`wrangler dev` + Miniflare, no Pulumi), `staging` and `production` (Pulumi stacks of the same name in both infra projects). Resource names follow `<thing>-<env>`, e.g. `expense-staging`, `receipts-production`, `expense-tracker-staging`.
+**Environments:** `local` (`wrangler dev` + Miniflare, no Pulumi), `staging` and `production` (Pulumi stacks of the same name in both infra projects). Resource names follow `<thing>-<env>`, e.g. `expense-staging`, `receipts-production`, `expense-tracker-staging`. Exception: the production Worker is `expense-tracker` (served at `expense-tracker.seelowbei.workers.dev`); the local wrangler config is `expense-tracker-local` so it can never deploy over it.
 
 ## Commands
 

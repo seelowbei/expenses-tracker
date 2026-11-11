@@ -390,7 +390,7 @@ expense-tracker/
 | --- | --- | --- | --- | --- | --- | --- |
 | local | `localhost:8787` | Local SQLite (Miniflare) | Local | Dev client, redirect to localhost | — | `wrangler dev` |
 | staging | `expense-tracker-staging.<sub>.workers.dev` | `expense-staging` | `receipts-staging` | Dev client | Pulumi stacks `staging` | Merge (push) to `main` |
-| production | Custom domain, or `expense-tracker-production.<sub>.workers.dev` | `expense-production` | `receipts-production` | Prod client | Pulumi stacks `production` | Published GitHub release, tag `v*` on `main` |
+| production | Custom domain, or `expense-tracker.<sub>.workers.dev` (Worker `expense-tracker`) | `expense-production` | `receipts-production` | Prod client | Pulumi stacks `production` | Published GitHub release, tag `v*` on `main` |
 
 **Pulumi projects**
 
@@ -407,7 +407,7 @@ Wrangler is no longer the deployment source. It runs local dev, bundles the Work
 
 ```jsonc
 {
-  "name": "expense-tracker",
+  "name": "expense-tracker-local",       // never a deployed Worker name
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",       // keep in sync with services config
   "compatibility_flags": ["nodejs_compat"],
@@ -490,7 +490,7 @@ jobs:
 
 **Migration rule:** additive only (new tables, nullable columns) in the same release as the code, because the migration runs before the new code is live. Drop or rename only in a later release. Use `wrangler d1 time-travel` to restore D1 to a point in time if a migration goes wrong.
 
-**Rollback:** re-run the Deploy run of the previous release (or revert on `main` for staging); Pulumi redeploys that build. In an emergency, `wrangler rollback --name expense-tracker-<env>` reverts within seconds, then the next `pulumi up` restores Pulumi as the source of truth. The D1 schema stays forward-compatible thanks to the additive rule.
+**Rollback:** re-run the Deploy run of the previous release (or revert on `main` for staging); Pulumi redeploys that build. In an emergency, `wrangler rollback --name <worker>` (`expense-tracker-staging` or `expense-tracker`) reverts within seconds, then the next `pulumi up` restores Pulumi as the source of truth. The D1 schema stays forward-compatible thanks to the additive rule.
 
 ## Risks, open questions & milestones
 
