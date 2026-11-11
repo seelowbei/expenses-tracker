@@ -154,4 +154,20 @@ describe("parseExtraction", () => {
     const r = parseExtraction('{"merchant": "x",}');
     expect(r.ok).toBe(false);
   });
+
+  it("returns the fields that passed on their own when the reply fails as a whole", () => {
+    const r = parseExtraction(JSON.stringify({ ...valid, txn_date: "sometime last week", merchant: "" }));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.partial).toMatchObject({ total: valid.total, currency: valid.currency, category_slug: valid.category_slug });
+    expect(r.partial).not.toHaveProperty("txn_date");
+    expect(r.partial).not.toHaveProperty("merchant");
+  });
+
+  it("returns no partial fields when there is no JSON", () => {
+    const r = parseExtraction("no json here");
+    expect(!r.ok && r.partial).toEqual({});
+    const bad = parseExtraction('{"merchant": "x",}');
+    expect(!bad.ok && bad.partial).toEqual({});
+  });
 });
