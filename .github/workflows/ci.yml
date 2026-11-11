@@ -1,11 +1,10 @@
-# Typecheck and test on every push and PR. No deploy, no secrets.
-# Deployment (deploy.yml: Pulumi services -> staging/production) comes in M5.
+# Typecheck and test on every PR. No deploy, no secrets.
+# Pushes to main and published releases run this via deploy.yml (workflow_call) before deploying.
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read

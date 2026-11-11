@@ -2,7 +2,8 @@
 // Deployed bindings and secrets are owned by infrastructure/services (Pulumi).
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "expense-tracker",
+  // Not "expense-tracker": that is the production Worker, so a stray `wrangler deploy` here must not hit it.
+  "name": "expense-tracker-local",
   "account_id": "10640769d8415d865c5f386b850d0ef5",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01", // keep in sync with infrastructure/services config

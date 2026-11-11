@@ -71,8 +71,8 @@ infrastructure/
 | Env | URL | D1 | Queue | Provisioned by | Deploy trigger |
 | --- | --- | --- | --- | --- | --- |
 | local | `localhost:8787` | Local SQLite (Miniflare) | Local | — | `wrangler dev` |
-| staging | `expense-tracker-staging.<sub>.workers.dev` | `expense-staging` | `receipts-staging` | Pulumi stack `staging` | Push to `main` |
-| production | Custom domain or `expense-tracker-production.<sub>.workers.dev` | `expense-production` | `receipts-production` | Pulumi stack `production` | Git tag `v*` |
+| staging | `expense-tracker-staging.<sub>.workers.dev` | `expense-staging` | `receipts-staging` | Pulumi stack `staging` | Merge (push) to `main` |
+| production | Custom domain or `expense-tracker.<sub>.workers.dev` | `expense-production` | `receipts-production` | Pulumi stack `production` | Published GitHub release `v*` on `main` |
 
 ## One-time setup
 
@@ -143,7 +143,7 @@ Worker tests run inside the Workers runtime via `@cloudflare/vitest-plugin` and 
 CI runs tests, builds the SPA and Worker bundle, applies D1 migrations (`--remote`), then runs `pulumi up` on `infrastructure/services` for the target stack. `infrastructure/foundation` is applied manually. Details: [`infrastructure/README.md`](./infrastructure/README.md).
 
 - **Migrations are additive only** in the same release as the code (new tables, nullable columns). Drop or rename only in a later release.
-- **Rollback:** re-run the workflow for the previous tag. Emergency: `wrangler rollback --name expense-tracker-<env>`, then redeploy through CI. Restore D1 with `wrangler d1 time-travel` if a migration goes wrong.
+- **Rollback:** re-run the Deploy run of the previous release. Emergency: `wrangler rollback --name <worker>` (`expense-tracker-staging` or `expense-tracker`), then redeploy through CI. Restore D1 with `wrangler d1 time-travel` if a migration goes wrong.
 
 ## Free-plan limits
 

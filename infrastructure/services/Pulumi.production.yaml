@@ -4,3 +4,14 @@ config:
   #   expense-services:customDomain        expenses.example.com
   #   expense-services:zoneId              <cloudflare-zone-id>
   expense-services:defaultCurrency: SGD
+  expense-services:appOrigin: https://expense-tracker.seelowbei.workers.dev
+  expense-services:googleClientId:
+    secure: AAABAOxx5hQBkff2VPcp/24c0YUCg+Iq1hJycfjR+nCLgWQBmxMvrdmFJ87L4dRWFxHYu3LbD2RwrLyb3RPb3WI+DK4gm8gjwe4/qPKb34pTvy0PI7N2k4v33E6/TDFVhqPwhUK3Dtw=
+  expense-services:googleClientSecret:
+    secure: AAABAPhvpmROT/uo+YgJc7LJUYbE0q+TlvKMXRyDmx0BCLGR+ZY3qPu7iDy5l6cZJVPO2NCI1qGSb/A65CnoNgumYA==
+  expense-services:sessionSecret:
+    secure: AAABAGQNy473CwVqzE82TRGXmbdTJcFf5jl5PZthc7z3Q1u2BhdOaCdt1AJCeu/5M3sRKVyPRUL3mp+ZA/NuyXzIex4YWfHSsWz34A==
+  expense-services:tokenEncKey:
+    secure: AAABAPSlFqnWj0+/SDfpHeUooeIliQCNX7LiymauM31e7qNnQz4J4K/SBlEImrQCPTOt+ha3Snpm36Y0Zm2YVTaJUjCyMmSq/gVl9Q==
+  expense-services:allowedEmails:
+    secure: AAABAIv2e15TAqzIlq12KOvWfCvvLgfBYw/TsTxc6+2ZqmnVEBwxdJun3dl3rNd474R1

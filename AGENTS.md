@@ -29,7 +29,7 @@ infrastructure/services/    Pulumi: Worker script, assets, bindings, secrets, qu
 
 pnpm workspace: `web`, `worker`, `infrastructure/*`.
 
-**Environments:** `local` (`wrangler dev` + Miniflare, no Pulumi), `staging` and `production` (Pulumi stacks of the same name in both infra projects). Resource names follow `<thing>-<env>`, e.g. `expense-staging`, `receipts-production`, `expense-tracker-staging`.
+**Environments:** `local` (`wrangler dev` + Miniflare, no Pulumi), `staging` and `production` (Pulumi stacks of the same name in both infra projects). Resource names follow `<thing>-<env>`, e.g. `expense-staging`, `receipts-production`, `expense-tracker-staging`. Exception: the production Worker is `expense-tracker` (served at `expense-tracker.seelowbei.workers.dev`); the local wrangler config is `expense-tracker-local` so it can never deploy over it.
 
 ## Commands
 
@@ -103,7 +103,7 @@ Run typecheck and the relevant tests before calling a change done.
 
 ## Do not
 
-- Run `wrangler deploy`, `wrangler secret put`, `wrangler rollback`, or any `--remote` D1 command. Deployment is CI-only (push to `main` → staging, tag `v*` → production).
+- Run `wrangler deploy`, `wrangler secret put`, `wrangler rollback`, or any `--remote` D1 command. Deployment is CI-only (merge to `main` → staging, published GitHub release `v*` → production).
 - Run `pulumi up`, `pulumi destroy`, `pulumi refresh`, `pulumi state`, `pulumi stack rm/init` or `pulumi config set`. `pulumi preview` is fine. Ask the user to apply.
 - Read, print or commit `worker/.dev.vars`, any `.env` file (e.g. `worker/.env` holding the dev token) or any secret. Never echo `$CLOUDFLARE_API_TOKEN`.
   When adding or renaming a local variable, update the templates `worker/.env.sample` (Wrangler CLI) and `worker/.dev.vars.sample` (Worker bindings) instead, plus the matching Pulumi config key in `infrastructure/services`.

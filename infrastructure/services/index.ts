@@ -42,7 +42,9 @@ const workerSha256 = crypto.createHash("sha256").update(fs.readFileSync(workerBu
 
 // ---- Worker ----------------------------------------------------------------
 
-const scriptName = `expense-tracker-${env}`;
+// Production keeps the bare name so it serves at expense-tracker.<sub>.workers.dev.
+// Renaming a deployed script creates a new Worker; change it only with the OAuth redirect URI and appOrigin.
+const scriptName = env === "production" ? "expense-tracker" : `expense-tracker-${env}`;
 const secret = (key: string) => config.requireSecret(key);
 
 const worker = new cloudflare.WorkersScript("worker", {
