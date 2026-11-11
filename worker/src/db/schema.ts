@@ -57,6 +57,7 @@ export const receipts = sqliteTable(
     error: text("error"),
     rawExtraction: text("raw_extraction"),
     retryAfter: text("retry_after"),
+    reviewReasons: text("review_reasons"), // JSON array of ReviewReason, set with needs_review (M3)
     createdAt: text("created_at").notNull(),
   },
   (t) => [unique().on(t.userId, t.sha256), index("idx_receipts_user_status").on(t.userId, t.status)],
@@ -124,3 +125,6 @@ export const aiUsage = sqliteTable(
 
 export type User = typeof users.$inferSelect;
 export type Receipt = typeof receipts.$inferSelect;
+export type Category = typeof categories.$inferSelect;
+export type NewLedgerEntry = typeof ledgerEntries.$inferInsert;
+export type NewAiUsage = typeof aiUsage.$inferInsert;

@@ -103,6 +103,7 @@ CREATE TABLE receipts (
   raw_extraction TEXT,                       -- parsed Extraction JSON (after normalisation, before user edits): audit + accuracy;
                                              -- after a failed repair, the fields that did parse (unvalidated), to pre-fill review
   retry_after    TEXT,                       -- ISO-8601 UTC; set when parked for the AI quota (status queued), cleared on re-enqueue
+  review_reasons TEXT,                       -- JSON array of post-validation reasons (e.g. ["total_mismatch","repaired"]); set with needs_review
   created_at     TEXT NOT NULL,
   UNIQUE (user_id, sha256)
 );
