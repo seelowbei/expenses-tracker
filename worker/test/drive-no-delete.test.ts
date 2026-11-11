@@ -2,7 +2,7 @@
 // drive.file would let the app delete, trash or overwrite files it created, so the code must not.
 import { describe, expect, it } from "vitest";
 import { driveApi } from "../src/drive/client";
-import { fakeGoogle, FOLDER_URL, json, UPLOAD_URL } from "./helpers";
+import { downloadUrl, fakeGoogle, FOLDER_URL, json, UPLOAD_URL } from "./helpers";
 
 // Vite's import.meta.glob, typed here because vite/client types aren't a worker dependency.
 declare global {
@@ -15,19 +15,23 @@ declare global {
 const sources = import.meta.glob("../src/**/*.ts", { query: "?raw", import: "default", eager: true });
 
 describe("Drive is write-once", () => {
-  it("the Drive client can only create a folder and upload a new file", async () => {
+  it("the Drive client can only create a folder, upload a new file and read a file", async () => {
     const google = fakeGoogle({
       [FOLDER_URL]: () => json({ id: "folder" }),
       [UPLOAD_URL]: () => json({ id: "file", webViewLink: "https://drive.google.com/file/d/file/view" }),
+      [downloadUrl("file")]: () => new Response(new Uint8Array([1, 2, 3])),
     });
     const drive = driveApi("at", google.fetch);
-    expect(Object.keys(drive).sort()).toEqual(["createFolder", "uploadMultipart"]);
+    expect(Object.keys(drive).sort()).toEqual(["createFolder", "downloadFile", "uploadMultipart"]);
 
     await drive.createFolder();
     await drive.uploadMultipart({ name: "r.jpg", mimeType: "image/jpeg", parentId: "folder", body: new Blob(["x"]) });
+    await drive.downloadFile("file");
     for (const call of google.calls) {
-      // POST to the collection = create. Anything addressing an existing file (/files/<id>) would be an update.
-      expect(call.key).toMatch(/^POST https:\/\/www\.googleapis\.com\/(upload\/)?drive\/v3\/files$/);
+      // POST to the collection = create; GET = read. Any other method on /files/<id> would be an update or delete.
+      expect(call.key).toMatch(
+        /^(POST https:\/\/www\.googleapis\.com\/(upload\/)?drive\/v3\/files|GET https:\/\/www\.googleapis\.com\/drive\/v3\/files\/[^/]+)$/,
+      );
       expect(call.body).not.toMatch(/trashed/i);
     }
   });

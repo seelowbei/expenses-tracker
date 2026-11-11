@@ -12,6 +12,7 @@ export const ORIGIN = "http://localhost:8787";
 export const TOKEN_URL = "POST https://oauth2.googleapis.com/token";
 export const FOLDER_URL = "POST https://www.googleapis.com/drive/v3/files";
 export const UPLOAD_URL = "POST https://www.googleapis.com/upload/drive/v3/files";
+export const downloadUrl = (fileId: string) => `GET https://www.googleapis.com/drive/v3/files/${fileId}`;
 
 type Handler = (req: Request) => Response | Promise<Response>;
 
