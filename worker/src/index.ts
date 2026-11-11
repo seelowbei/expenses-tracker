@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { aiClient } from "./agent/extract";
 import { meRoutes } from "./api/me";
 import { receiptRoutes } from "./api/receipts";
 import type { AppDeps, AppEnv } from "./app-env";
@@ -7,6 +8,8 @@ import { authRoutes } from "./auth/routes";
 import { getDb } from "./db/client";
 import { devRoutes } from "./dev/routes";
 import type { Bindings } from "./env";
+import type { ReceiptMessage } from "./pipeline/message";
+import { handleQueue } from "./pipeline/queue";
 
 const defaultDeps: AppDeps = { fetch: (input, init) => fetch(input, init) };
 
@@ -40,16 +43,10 @@ export function createApp(deps: AppDeps = defaultDeps) {
 
 export const app = createApp();
 
-export interface ReceiptMessage {
-  receiptId: string;
-  userId: string;
-}
-
 export default {
   fetch: app.fetch,
 
-  // M3 implements the extraction consumer. Until then, nothing produces messages.
-  async queue(batch: MessageBatch<ReceiptMessage>): Promise<void> {
-    for (const msg of batch.messages) msg.retry({ delaySeconds: 60 });
+  async queue(batch: MessageBatch<ReceiptMessage>, env: Bindings): Promise<void> {
+    await handleQueue(batch, env, { app: defaultDeps, ai: aiClient(env.AI) });
   },
 } satisfies ExportedHandler<Bindings, ReceiptMessage>;

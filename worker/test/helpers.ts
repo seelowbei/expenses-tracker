@@ -5,6 +5,7 @@ import { encryptToken } from "../src/auth/crypto";
 import { createSession } from "../src/auth/session";
 import { getDb, nowIso } from "../src/db/client";
 import { users } from "../src/db/schema";
+import type { Bindings } from "../src/env";
 import { createApp } from "../src/index";
 import { toBase64Url } from "../src/lib/encoding";
 
@@ -71,6 +72,10 @@ export function makeApp(fake = fakeGoogle()) {
 }
 
 export const db = () => getDb(env.DB);
+
+/** The test env typed as the Worker's bindings. Tests bind no AI or queue: they pass fakes instead. */
+// Cast: the generated Env marks AI/RECEIPT_QUEUE optional; code under test never touches the real ones.
+export const bindings = (overrides: Partial<Bindings> = {}): Bindings => ({ ...(env as unknown as Bindings), ...overrides });
 
 /** Runs app requests against the test env with some bindings replaced. */
 export function requestWithEnv(app: ReturnType<typeof makeApp>["app"], overrides: Partial<typeof env>) {
