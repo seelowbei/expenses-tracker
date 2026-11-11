@@ -9,6 +9,7 @@ import { getDb } from "./db/client";
 import { devRoutes } from "./dev/routes";
 import type { Bindings } from "./env";
 import type { ReceiptMessage } from "./pipeline/message";
+import { runParkCron } from "./pipeline/cron";
 import { handleQueue } from "./pipeline/queue";
 
 const defaultDeps: AppDeps = { fetch: (input, init) => fetch(input, init) };
@@ -48,5 +49,9 @@ export default {
 
   async queue(batch: MessageBatch<ReceiptMessage>, env: Bindings): Promise<void> {
     await handleQueue(batch, env, { app: defaultDeps, ai: aiClient(env.AI) });
+  },
+
+  async scheduled(_controller: ScheduledController, env: Bindings): Promise<void> {
+    await runParkCron(getDb(env.DB), env.RECEIPT_QUEUE);
   },
 } satisfies ExportedHandler<Bindings, ReceiptMessage>;

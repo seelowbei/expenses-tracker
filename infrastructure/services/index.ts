@@ -1,5 +1,5 @@
 // Deploys the Expense Tracker Worker onto the foundation resources:
-// SPA static assets + Hono API (fetch) + receipt extraction (queue consumer).
+// SPA static assets + Hono API (fetch) + receipt extraction (queue consumer) + daily re-send (cron).
 //
 // Build first (see infrastructure/README.md):
 //   pnpm --filter web build                                 -> web/dist
@@ -87,6 +87,18 @@ new cloudflare.QueueConsumer(
     scriptName: worker.scriptName,
     deadLetterQueue: receiptDlqName,
     settings: { batchSize: 1, maxRetries: 3 },
+  },
+  { dependsOn: [worker] },
+);
+
+// Daily re-send of receipts parked for the AI quota (or a failed queue send), five minutes after the
+// 00:00 UTC Workers AI reset. Keep in sync with PARK_CRON in worker/src/pipeline/timing.ts and wrangler.jsonc.
+new cloudflare.WorkersCronTrigger(
+  "receipts-park-cron",
+  {
+    accountId,
+    scriptName: worker.scriptName,
+    schedules: [{ cron: "5 0 * * *" }],
   },
   { dependsOn: [worker] },
 );

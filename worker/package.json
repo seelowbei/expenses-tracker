@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "mkdir -p ../web/dist && wrangler dev",
+    "dev": "mkdir -p ../web/dist && wrangler dev --test-scheduled",
     "bundle": "mkdir -p ../web/dist && wrangler deploy --dry-run --outdir dist",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",
