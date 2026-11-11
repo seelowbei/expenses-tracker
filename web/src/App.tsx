@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { ApiError, getMe, listReceipts, logout, uploadReceipt, type Me, type Receipt } from "./api";
+import { ApiError, getMe, listReceipts, logout, retryReceipt, uploadReceipt, type Me, type Receipt } from "./api";
 import { prepareFile, PrepareError } from "./prepare";
 
 const SIGN_IN_ERRORS: Record<string, string> = {
@@ -85,8 +85,20 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<UploadState[]>([]);
-  // M3 adds polling of queued/processing receipts; nothing changes status before then.
-  const receipts = useQuery({ queryKey: ["receipts"], queryFn: listReceipts });
+  // Poll every 3 s while a receipt is being worked on (spec "API"). Stops when none is, and after
+  // POLL_CAP_MS without any change, so a receipt stuck by a crash can't poll all day; an upload restarts it.
+  const lastChange = useRef({ sig: "", at: 0 });
+  const receipts = useQuery({
+    queryKey: ["receipts"],
+    queryFn: listReceipts,
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (!data) return false;
+      const sig = data.map((r) => `${r.id}:${r.status}:${r.error ?? ""}`).join("|");
+      if (sig !== lastChange.current.sig) lastChange.current = { sig, at: Date.now() };
+      return data.some(isWorking) && Date.now() - lastChange.current.at < POLL_CAP_MS ? POLL_MS : false;
+    },
+  });
 
   const setState = (i: number, s: Partial<UploadState>) => setUploads((u) => u.map((x, j) => (j === i ? { ...x, ...s } : x)));
 
@@ -175,18 +187,57 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
   );
 }
 
+const POLL_MS = 3000;
+const POLL_CAP_MS = 15 * 60 * 1000;
+
+/** Queued or processing, and not parked until tomorrow. */
+const isWorking = (r: Receipt) => (r.status === "queued" && !r.retryAfter) || r.status === "processing";
+
 const STATUS_LABEL: Record<Receipt["status"], string> = {
   uploading: "Uploading",
   queued: "Waiting for extraction",
-  processing: "Reading",
+  processing: "Reading…",
   done: "Done",
   needs_review: "Needs review",
   failed: "Failed",
 };
 
+const FAILURE_DETAIL: Record<string, string> = {
+  unsupported_scanned_pdf: "Scanned PDF: upload a photo or screenshot instead",
+  pdf_conversion_failed: "Couldn't read this PDF",
+  drive_file_missing: "The file was removed from Drive: upload it again",
+  drive_disconnected: "Google Drive was disconnected",
+  processing_timeout: "Took too long to read",
+};
+
+/** Failures where retrying the same Drive file can't help. */
+const NO_RETRY = new Set(["unsupported_scanned_pdf", "drive_file_missing", "drive_disconnected"]);
+
+function statusText(r: Receipt): { label: string; detail?: string } {
+  const after = r.retryAfter && new Date(r.retryAfter).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+  if (r.status === "queued" && after) {
+    return r.error === "ai_quota"
+      ? { label: "Waiting", detail: `Waiting for tomorrow's AI quota (after ${after})` }
+      : { label: "Waiting", detail: `Will be sent for extraction after ${after}` };
+  }
+  if (r.status === "queued" && r.error) return { label: "Retrying soon" };
+  if (r.status === "needs_review" && r.error === "invalid_output") return { label: "Needs review", detail: "Some fields couldn't be read" };
+  if (r.status === "failed") return { label: "Failed", detail: (r.error && FAILURE_DETAIL[r.error]) ?? "Couldn't be read" };
+  return { label: STATUS_LABEL[r.status] };
+}
+
 function ReceiptRow({ r }: { r: Receipt }) {
+  const qc = useQueryClient();
+  const retry = useMutation({
+    mutationFn: () => retryReceipt(r.id),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["receipts"] }),
+  });
   const when = new Date(r.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   const type = r.mimeType === "application/pdf" ? "PDF" : "Image";
+  const { label, detail } = statusText(r);
+  const canRetry = r.status === "failed" && !!r.driveLink && !(r.error && NO_RETRY.has(r.error));
+  const retryError =
+    retry.error instanceof ApiError && retry.error.code === "reupload_required" ? "Upload the file again" : retry.error ? "Retry failed" : null;
   return (
     <li className="flex items-center gap-3 px-4 py-3 text-sm">
       <div className="min-w-0 flex-1">
@@ -195,7 +246,21 @@ function ReceiptRow({ r }: { r: Receipt }) {
           {type} · {Math.max(1, Math.round(r.sizeBytes / 1024))} KB
         </div>
       </div>
-      <span className={r.status === "failed" ? "text-red-600" : "text-slate-600 dark:text-slate-400"}>{STATUS_LABEL[r.status]}</span>
+      <div className="text-right">
+        <div className={r.status === "failed" ? "text-red-600" : r.status === "needs_review" ? "text-amber-700 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"}>
+          {label}
+        </div>
+        {(retryError ?? detail) && <div className="text-xs text-slate-500">{retryError ?? detail}</div>}
+      </div>
+      {canRetry && (
+        <button
+          onClick={() => retry.mutate()}
+          disabled={retry.isPending}
+          className="rounded-md border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          Retry
+        </button>
+      )}
       {r.driveLink && (
         <a href={r.driveLink} target="_blank" rel="noreferrer" className="text-teal-700 underline dark:text-teal-400">
           View
