@@ -85,3 +85,29 @@ Replaying two runs' extractions through the final checks:
 - Every wrong total went to review in both runs: the delivery-app voucher, the multi-item receipt, and the garbled JPY total.
 - One false alarm (`total_unverified`), when the model copied a receipt number instead of the total line. A stricter first version, which flagged any line without an amount, sent 6 of 10 to review.
 - Still `done` but wrong: a merchant returned as its legal entity name, and a faded date misread (09 → 19). No code check can see either; only your corrections will.
+
+
+## M3 regression rerun — Nov 16, 2026
+
+User ran `pnpm --filter worker eval` against the local dev server and supplied the console report. Results file: `worker/eval/results/run-2026-11-16T09-48-05-376Z.json` (git-ignored). The set now includes 12 labelled receipts: the 10 images plus 2 text PDFs.
+
+**Rerun complete; combined-set total accuracy misses the target.** Date passes. This does not establish a regression caused by M3: the original passing baseline used 10 images, and earlier mixed-set runs already showed total errors and run-to-run variation. In this rerun, the 10-image subset still scores 9/10 on both total and date.
+
+| Field | Accuracy | Target result |
+| --- | --- | --- |
+| merchant | 91.7% (11/12) | |
+| txn_date | 91.7% (11/12) | 90%: pass |
+| txn_time | 90.9% (10/11) | none |
+| total | 83.3% (10/12) | 90%: fail |
+| tax | 75.0% (9/12) | |
+| currency | 100% (12/12) | |
+| category | 91.7% (11/12) | |
+
+- Status: 7 `done`, 5 `needs_review`, no extraction failures.
+- Merchant, date and total all correct: 8/12 (66.7%); 5/7 among `done`, 3/5 among `needs_review`.
+- Both incorrect totals (the delivery-app image and one text PDF) were routed to `needs_review`.
+- Two `done` receipts still have a core-field error: one merchant mismatch and one incorrect date. A separate `done` receipt has an incorrect time. Tax and category also remain imperfect.
+- 1.17 LLM calls per receipt; 16.7% repair rate; average latency 7.81 s.
+- Estimated usage: 487.2 neurons total, 40.6 per receipt; reported capacity about 246 receipts/day within the free cap.
+
+The existing provisional-go decision remains unchanged: use corrections to assess real accuracy and decide whether a model fallback is needed. This run is not an all-fields accuracy pass and does not verify the queue, ledger writes, scanned-PDF rejection or cron recovery; the eval calls the extraction route directly.

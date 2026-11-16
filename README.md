@@ -8,7 +8,7 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
 ## Status
 
-**M3 (pipeline) built** on `m3/pipeline`, manual check pending ([`documents/M3 plan.md`](./documents/M3%20plan.md)). **M2 (sign-in + Drive upload) done**, verified locally with real Google accounts. M1 passed provisionally on 10 receipts ([`documents/M1 eval results.md`](./documents/M1%20eval%20results.md)). M2 adds Google sign-in, encrypted refresh tokens, the `Expense Receipts` Drive folder, uploads and the first D1 migrations ([`documents/M2 plan.md`](./documents/M2%20plan.md)). Work follows the spec's milestones:
+**M3 (pipeline) implemented and locally verified** on `m3/pipeline` on Nov 16, 2026; PR review and staging verification remain. The 12-receipt eval re-run passed date accuracy (91.7%) but missed total accuracy (83.3% versus 90%); verification details and staging follow-ups are tracked in the plan ([`documents/M3 plan.md`](./documents/M3%20plan.md)). **M2 (sign-in + Drive upload) done**, verified locally with real Google accounts. M1 passed provisionally on 10 receipts ([`documents/M1 eval results.md`](./documents/M1%20eval%20results.md)). M2 adds Google sign-in, encrypted refresh tokens, the `Expense Receipts` Drive folder, uploads and the first D1 migrations ([`documents/M2 plan.md`](./documents/M2%20plan.md)). Work follows the spec's milestones:
 
 | Milestone | Scope |
 | --- | --- |
