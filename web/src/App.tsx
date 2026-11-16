@@ -210,8 +210,8 @@ const FAILURE_DETAIL: Record<string, string> = {
   processing_timeout: "Took too long to read",
 };
 
-/** Failures where retrying the same Drive file can't help. */
-const NO_RETRY = new Set(["unsupported_scanned_pdf", "drive_file_missing", "drive_disconnected"]);
+/** Permanent failures only; drive_disconnected can be retried after signing in again. */
+const NO_RETRY = new Set(["unsupported_scanned_pdf", "drive_file_missing"]);
 
 function statusText(r: Receipt): { label: string; detail?: string } {
   const after = r.retryAfter && new Date(r.retryAfter).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
