@@ -312,6 +312,18 @@ The UI polls `GET /api/receipts?status=queued,processing` every 3 s while anythi
 
 Ledger entries carry `txn_time` (`"HH:MM"` or `null`). `GET /api/ledger` orders entries by `txn_date` then `txn_time` (entries without a time last within their day), and `PATCH /api/ledger/:id` accepts `txn_time` (`"HH:MM"` or `null`) like any other field. AI usage has no API in v1; it is stored for later reporting and queried with `wrangler d1 execute` until then.
 
+### M4.1 read API contract (November 16, 2026)
+
+`GET /api/categories` returns `{ categories: [{ id, slug, name }] }`, containing system defaults and the session user's custom categories, ordered by display name then ID. Existing slug collisions remain visible; extraction keeps its existing user-category precedence.
+
+`GET /api/ledger` accepts inclusive `from`/`to` dates, optional `category` ID, `limit` (default 50, maximum 100), and an opaque `cursor`. Both dates must be supplied together; omitting both selects the current UTC month. Dates must be real `YYYY-MM-DD` dates, with a range spanning no more than 12 calendar months. The browser supplies its selected calendar range explicitly. Invalid filters/cursors return 400; an inaccessible category returns 404. Cursor positions are tied to the requested filters.
+
+The response is `{ entries, totals, nextCursor }`. Entries use the documented snake_case ledger fields plus `category_name`, `receipt_status` and `drive_link`. List summaries omit line items, notes, raw extraction and confidence. Entries sort by descending date, descending time (unknown times last within the day), then descending ID. Totals cover the **whole filtered range**, grouped by category, month and currency, independently of pagination. Each total includes `entry_count` and `needs_review_count`; entries awaiting review are included but visibly provisional. A receipt without a ledger entry contributes nothing. Unsafe integer amounts/totals fail with `amount_out_of_range` instead of returning rounded numbers.
+
+`GET /api/ledger/:id` returns `{ entry }` with the summary fields plus tax, payment method, normalized line items, notes, source, confidence, timestamps and original review reasons. Missing and other-user entries return 404. All joins enforce session ownership (or system-default category visibility); missing Drive files never prevent ledger reads. These routes make no Drive or AI calls.
+
+M4.1 exposes read-only browsing and details; editing/confirmation, the complete review inbox, category creation and deletion follow in M4.2–M4.5. Existing upload, receipt status and retry behavior remains available during this rollout.
+
 ## Security & privacy
 
 The two highest-value secrets are the users' Google refresh tokens. They are encrypted at rest and never leave the Worker.
