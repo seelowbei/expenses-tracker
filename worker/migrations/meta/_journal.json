@@ -15,6 +15,13 @@
       "when": 1794300408341,
       "tag": "0001_seed_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794374484421,
+      "tag": "0002_receipt_review_reasons",
+      "breakpoints": true
     }
   ]
 }

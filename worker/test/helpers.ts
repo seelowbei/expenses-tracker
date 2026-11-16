@@ -5,6 +5,8 @@ import { encryptToken } from "../src/auth/crypto";
 import { createSession } from "../src/auth/session";
 import { getDb, nowIso } from "../src/db/client";
 import { users } from "../src/db/schema";
+import type { Bindings } from "../src/env";
+import type { ReceiptMessage } from "../src/pipeline/message";
 import { createApp } from "../src/index";
 import { toBase64Url } from "../src/lib/encoding";
 
@@ -12,6 +14,7 @@ export const ORIGIN = "http://localhost:8787";
 export const TOKEN_URL = "POST https://oauth2.googleapis.com/token";
 export const FOLDER_URL = "POST https://www.googleapis.com/drive/v3/files";
 export const UPLOAD_URL = "POST https://www.googleapis.com/upload/drive/v3/files";
+export const downloadUrl = (fileId: string) => `GET https://www.googleapis.com/drive/v3/files/${fileId}`;
 
 type Handler = (req: Request) => Response | Promise<Response>;
 
@@ -63,17 +66,38 @@ export function tokenResponse(opts: { sub: string; email: string; refreshToken?:
   });
 }
 
-export function makeApp(fake = fakeGoogle()) {
+/** A RECEIPT_QUEUE stand-in that records sends, or throws when `failing` is set. */
+export function fakeQueue() {
+  const sent: ReceiptMessage[] = [];
+  const state = { failing: false };
+  const queue = {
+    async send(body: ReceiptMessage) {
+      if (state.failing) throw new Error("Queue send failed: too many requests");
+      sent.push(body);
+    },
+    async sendBatch(messages: Iterable<{ body: ReceiptMessage }>) {
+      if (state.failing) throw new Error("Queue send failed: too many requests");
+      for (const m of messages) sent.push(m.body);
+    },
+  } as unknown as Queue<ReceiptMessage>; // only send/sendBatch are used
+  return { queue, sent, state };
+}
+
+export function makeApp(fake = fakeGoogle(), queue = fakeQueue()) {
   const app = createApp({ fetch: fake.fetch });
-  const request = (path: string, init: RequestInit = {}) => app.request(path, init, env);
-  return { app, fake, request };
+  const request = (path: string, init: RequestInit = {}) => app.request(path, init, bindings({ RECEIPT_QUEUE: queue.queue }));
+  return { app, fake, request, queue };
 }
 
 export const db = () => getDb(env.DB);
 
+/** The test env typed as the Worker's bindings. Tests bind no AI or queue: they pass fakes instead. */
+// Cast: the generated Env marks AI/RECEIPT_QUEUE optional; code under test never touches the real ones.
+export const bindings = (overrides: Partial<Bindings> = {}): Bindings => ({ ...(env as unknown as Bindings), ...overrides });
+
 /** Runs app requests against the test env with some bindings replaced. */
-export function requestWithEnv(app: ReturnType<typeof makeApp>["app"], overrides: Partial<typeof env>) {
-  const patched = { ...env, ...overrides };
+export function requestWithEnv(app: ReturnType<typeof makeApp>["app"], overrides: Partial<Bindings>) {
+  const patched = bindings({ RECEIPT_QUEUE: fakeQueue().queue, ...overrides });
   return (path: string, init: RequestInit = {}) => app.request(path, init, patched);
 }
 

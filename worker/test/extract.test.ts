@@ -121,6 +121,16 @@ describe("extractReceipt", () => {
     const r = await extractReceipt(ai, jpeg, ctx);
     expect(!r.ok && r.code).toBe("invalid_output");
     expect(r.calls.map((c) => c.outcome)).toEqual(["invalid_output", "invalid_output"]);
+    expect(!r.ok && r.partial).toEqual({});
+  });
+
+  it("returns the last reply's usable fields with invalid_output", async () => {
+    const half = JSON.stringify({ merchant: "Kopitiam", total: 4.5, currency: "SGD", txn_date: "??" });
+    const { ai } = fakeAi([half, half]);
+    const r = await extractReceipt(ai, jpeg, ctx);
+    expect(!r.ok && r.code).toBe("invalid_output");
+    expect(!r.ok && r.partial).toMatchObject({ merchant: "Kopitiam", total: 4.5, currency: "SGD" });
+    expect(!r.ok && r.partial).not.toHaveProperty("txn_date");
   });
 
   it("reports quota errors distinctly and records the call", async () => {

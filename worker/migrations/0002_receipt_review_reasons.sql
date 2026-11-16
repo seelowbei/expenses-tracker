@@ -1,0 +1,1 @@
+ALTER TABLE `receipts` ADD `review_reasons` text;

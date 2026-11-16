@@ -1,4 +1,4 @@
-// Minimal Google Drive v3 client (drive.file scope): create folder, multipart upload.
+// Minimal Google Drive v3 client (drive.file scope): create folder, multipart upload, download.
 import type { Fetcher } from "../app-env";
 
 const FILES_URL = "https://www.googleapis.com/drive/v3/files";
@@ -34,6 +34,8 @@ async function ensureOk(res: Response): Promise<Response> {
 export interface DriveApi {
   createFolder(name?: string): Promise<string>;
   uploadMultipart(file: { name: string; mimeType: string; parentId: string; body: Blob }): Promise<{ id: string; webViewLink: string }>;
+  /** Read-only `files.get?alt=media`. 404 when the user deleted the file (or it isn't ours). */
+  downloadFile(fileId: string): Promise<Uint8Array>;
 }
 
 export function driveApi(accessToken: string, fetcher: Fetcher): DriveApi {
@@ -69,6 +71,13 @@ export function driveApi(accessToken: string, fetcher: Fetcher): DriveApi {
         }),
       );
       return (await res.json()) as { id: string; webViewLink: string };
+    },
+
+    async downloadFile(fileId) {
+      const res = await ensureOk(
+        await fetcher(`${FILES_URL}/${encodeURIComponent(fileId)}?alt=media`, { method: "GET", headers: auth }),
+      );
+      return new Uint8Array(await res.arrayBuffer());
     },
   };
 }

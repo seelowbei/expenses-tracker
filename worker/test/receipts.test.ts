@@ -6,7 +6,7 @@ import { sha256Hex } from "../src/lib/encoding";
 import { validateSession } from "../src/auth/session";
 import { receipts, users } from "../src/db/schema";
 import { cacheAccessToken, clearAccessTokenCache } from "../src/drive/access";
-import { d1WithHook, db, FOLDER_URL, fakeGoogle, json, makeApp, ORIGIN, requestWithEnv, seedUser, TOKEN_URL, UPLOAD_URL } from "./helpers";
+import { d1WithHook, db, FOLDER_URL, fakeGoogle, fakeQueue, json, makeApp, ORIGIN, requestWithEnv, seedUser, TOKEN_URL, UPLOAD_URL } from "./helpers";
 
 beforeEach(() => clearAccessTokenCache());
 
@@ -36,15 +36,16 @@ async function upload(request: ReturnType<typeof makeApp>["request"], cookie: st
 }
 
 describe("POST /api/receipts", () => {
-  it("uploads to the user's Drive folder and leaves the receipt queued", async () => {
+  it("uploads to the user's Drive folder, queues the receipt and sends it for extraction", async () => {
     const { cookie, id } = await seedUser({ driveFolderId: "folder-a" });
     const google = fakeGoogle({ [TOKEN_URL]: refreshOk, [UPLOAD_URL]: uploadOk("file-a") });
-    const { request } = makeApp(google);
+    const { request, queue } = makeApp(google);
     const bytes = unique(JPEG);
 
     const res = await upload(request, cookie, bytes);
     expect(res.status).toBe(202);
     const { receipt } = (await res.json()) as { receipt: { id: string; status: string; driveLink: string; mimeType: string } };
+    expect(queue.sent).toEqual([{ receiptId: receipt.id, userId: id }]);
     expect(receipt).toMatchObject({ status: "queued", mimeType: "image/jpeg", driveLink: "https://drive.google.com/file/d/file-a/view" });
 
     const refresh = new URLSearchParams(google.callsTo(TOKEN_URL)[0]!.body);
@@ -361,5 +362,91 @@ describe("GET /api/receipts", () => {
 
     expect((await request("/api/receipts?status=bogus", { headers: { Cookie: a.cookie } })).status).toBe(400);
     expect(env.APP_ORIGIN).toBe(ORIGIN);
+  });
+
+  it("parks the receipt for the cron when the queue send fails, and still returns 202", async () => {
+    const { cookie } = await seedUser();
+    const queue = fakeQueue();
+    queue.state.failing = true;
+    const { request } = makeApp(fakeGoogle({ [TOKEN_URL]: refreshOk, [UPLOAD_URL]: uploadOk() }), queue);
+    const res = await upload(request, cookie, unique(JPEG));
+    expect(res.status).toBe(202);
+    const { receipt } = (await res.json()) as { receipt: { id: string; status: string; error: string; retryAfter: string } };
+    expect(receipt).toMatchObject({ status: "queued", error: "queue_unavailable" });
+    expect(receipt.retryAfter).toMatch(/T00:05:00\.000Z$/);
+  });
+
+  it("lets a receipt whose Drive file was deleted be uploaded again, with a new file", async () => {
+    const { cookie, id } = await seedUser();
+    const google = fakeGoogle({ [TOKEN_URL]: refreshOk, [UPLOAD_URL]: uploadOk("file-old") });
+    const { request } = makeApp(google);
+    const bytes = unique(JPEG);
+    const first = (await (await upload(request, cookie, bytes)).json()) as { receipt: { id: string } };
+    await db().update(receipts).set({ status: "failed", error: "drive_file_missing" }).where(eq(receipts.id, first.receipt.id));
+
+    google.set(UPLOAD_URL, uploadOk("file-new"));
+    const again = await upload(request, cookie, bytes);
+    expect(again.status).toBe(202);
+    const rows = await db().select().from(receipts).where(eq(receipts.userId, id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: first.receipt.id, status: "queued", driveFileId: "file-new", error: null });
+  });
+});
+
+describe("POST /api/receipts/:id/retry", () => {
+  async function failedReceipt(opts: { error?: string; driveFileId?: string | null } = {}) {
+    const user = await seedUser();
+    const id = crypto.randomUUID();
+    await db().insert(receipts).values({
+      id,
+      userId: user.id,
+      driveFileId: opts.driveFileId === undefined ? "file-x" : opts.driveFileId,
+      mimeType: "image/jpeg",
+      sizeBytes: 3,
+      sha256: `sha-${id}`,
+      status: "failed",
+      error: opts.error ?? "ai_error",
+      attempts: 4,
+      createdAt: new Date().toISOString(),
+    });
+    return { user, id };
+  }
+  const post = (request: ReturnType<typeof makeApp>["request"], cookie: string, id: string) =>
+    request(`/api/receipts/${id}/retry`, { method: "POST", headers: { Cookie: cookie, Origin: ORIGIN } });
+
+  it("re-queues a failed receipt and sends it, once", async () => {
+    const { user, id } = await failedReceipt();
+    const { request, queue } = makeApp();
+    const res = await post(request, user.cookie, id);
+    expect(res.status).toBe(202);
+    expect(((await res.json()) as { receipt: { status: string; error: null } }).receipt).toMatchObject({ status: "queued", error: null });
+    expect(queue.sent).toEqual([{ receiptId: id, userId: user.id }]);
+
+    const again = await post(request, user.cookie, id);
+    expect(again.status).toBe(409);
+    expect(await again.json()).toEqual({ error: "not_retryable", receiptId: id });
+    expect(queue.sent).toHaveLength(1);
+  });
+
+  it("refuses scanned PDFs, asks for a re-upload without a Drive file, and hides other users' receipts", async () => {
+    const { request } = makeApp();
+    const scanned = await failedReceipt({ error: "unsupported_scanned_pdf" });
+    expect(await (await post(request, scanned.user.cookie, scanned.id)).json()).toEqual({ error: "not_retryable", receiptId: scanned.id });
+
+    const missing = await failedReceipt({ error: "drive_file_missing" });
+    expect(await (await post(request, missing.user.cookie, missing.id)).json()).toEqual({ error: "reupload_required", receiptId: missing.id });
+
+    const noFile = await failedReceipt({ error: "drive_unavailable", driveFileId: null });
+    expect(await (await post(request, noFile.user.cookie, noFile.id)).json()).toEqual({ error: "reupload_required", receiptId: noFile.id });
+
+    const other = await seedUser({ email: "bob@example.com" });
+    expect((await post(request, other.cookie, scanned.id)).status).toBe(404);
+  });
+
+  it("requires our Origin", async () => {
+    const { user, id } = await failedReceipt();
+    const { request } = makeApp();
+    const res = await request(`/api/receipts/${id}/retry`, { method: "POST", headers: { Cookie: user.cookie, Origin: "https://evil.example" } });
+    expect(res.status).toBe(403);
   });
 });

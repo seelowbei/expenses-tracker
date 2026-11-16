@@ -8,7 +8,7 @@ Receipt-to-ledger expense tracker for two users on the **Cloudflare Workers Free
 
 The design is in `documents/Expense Tracker — Technical Spec.md`. Read the relevant section before implementing anything; it defines the schema, flows, API, prompt, Zod schema and failure handling. If the code and spec disagree, stop and ask rather than silently picking one.
 
-**Status:** M1 (extraction spike) done provisionally: the eval passes on 10 local receipts (`documents/M1 eval results.md`), which stay as a regression set; re-run `pnpm --filter worker eval` after any change in `src/agent/`. Real accuracy will come from user corrections (spec, "Evaluation before launch"). M2 (Google sign-in + Drive upload) done and verified locally with real Google accounts: `/auth/*`, `/api/me`, `POST/GET /api/receipts`, the first migrations (full spec schema + default categories) and the SPA in `web/`. Plan and decisions: `documents/M2 plan.md`. Do not build M3+ features unless asked.
+**Status:** M1 (extraction spike) done provisionally: the original eval passed on 10 local receipts (`documents/M1 eval results.md`), which stay as a regression set; re-run `pnpm --filter worker eval` after any change in `src/agent/`. Real accuracy will come from user corrections (spec, "Evaluation before launch"). M2 (Google sign-in + Drive upload) done and verified locally with real Google accounts: `/auth/*`, `/api/me`, `POST/GET /api/receipts`, the first migrations (full spec schema + default categories) and the SPA in `web/`. Plan and decisions: `documents/M2 plan.md`. M3 (pipeline) implemented and locally verified on branch `m3/pipeline`: tests green; image/text-PDF extraction, persistence, polling, scanned-PDF rejection and cron recovery passed on Nov 16, 2026. PR review and staging verification remain. The Nov 16 eval re-run on 12 receipts passed date accuracy (91.7%) but missed total accuracy (83.3% versus 90%); both wrong totals were routed to review. Verification details and staging follow-ups are tracked in the M3 plan. Includes: queue consumer, ledger and `ai_usage` writes, quota parking, daily cron, retry route, SPA polling (`documents/M3 plan.md`). Do not build M4+ features unless asked.
 
 ## Layout
 
@@ -16,6 +16,7 @@ The design is in `documents/Expense Tracker — Technical Spec.md`. Read the rel
 documents/           Technical spec and other project docs
 web/                 Vite + React + TS SPA (TanStack Query, Tailwind) -> web/dist
 worker/src/index.ts  Hono app; exports { fetch, queue, scheduled }
+worker/src/pipeline/ queue consumer, enqueue/park, daily cron, retry timing
 worker/src/auth/     oauth4webapi Google OIDC + PKCE, sessions, AES-GCM token crypto, /auth routes
 worker/src/api/      /api/me, /api/receipts
 worker/src/drive/    Drive v3 client (drive.file scope)
@@ -41,6 +42,7 @@ pnpm --filter worker coverage                         # tests + Istanbul coverag
 pnpm --filter web build                               # SPA -> web/dist (needed before wrangler dev)
 pnpm --filter worker bundle                           # Worker -> worker/dist/index.js (for Pulumi services)
 pnpm --filter worker dev                              # local app on :8787 (needs Cloudflare auth: AI is always remote)
+curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=5+0+*+*+*"   # fire the daily cron locally (sends parked receipts: spends neurons)
 pnpm --filter worker eval                             # M1 eval against the running dev server (spends neurons)
 pnpm --filter worker types                            # regenerate worker-configuration.d.ts after wrangler.jsonc changes
 pnpm --filter worker exec wrangler d1 migrations apply expense-local --local
@@ -112,8 +114,5 @@ Run typecheck and the relevant tests before calling a change done.
 
 ## Spec revisions not yet in code
 
-- **Nov 10, 2026 (M2, decided):** uploads end in `queued` without sending to `RECEIPT_QUEUE`; M3 adds the send in `src/api/receipts.ts` together with the consumer and the SPA's 3 s polling. The resumable upload for files over 5 MB is deferred to M5 (until then `413 file_too_large`).
-
-- **Nov 10, 2026 (decided):** "Invalid LLM JSON twice" creates no ledger entry: the receipt goes to `needs_review` with `error='invalid_output'` and a review form pre-filled from the fields that did parse; the entry is created on save. `extractReceipt` does not yet return those partial fields. M3 work.
-- **Nov 10, 2026 (decided):** AI quota exhausted parks the receipt in D1 (`queued` + `receipts.retry_after`) and a `scheduled` Cron Trigger at 00:05 UTC re-enqueues it; no `msg.retry` across days. The cron goes in both `infrastructure/services` and `wrangler.jsonc`. M3 work.
-- **Nov 10, 2026:** `txn_time` and per-call usage capture are implemented in `worker/src/agent/` (`AiCallRecord` in `usage.ts` mirrors the `ai_usage` columns). Persisting those records to D1 (`ai_usage` table, Drizzle schema, migration, `batch()` with the status update) is M3 work, not a code/spec conflict.
+- **Nov 10, 2026 (M2, decided):** the resumable upload for files over 5 MB is deferred to M5 (until then `413 file_too_large`).
+- **Nov 10, 2026 (decided), M4 part:** after "invalid LLM JSON twice" the receipt is `needs_review` with `error='invalid_output'` and the parsed fields in `raw_extraction` (done in M3). The pre-filled review form and creating the entry on save (`source='ai_edited'`) are M4 work.

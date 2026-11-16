@@ -1,4 +1,4 @@
-// /api/receipts: direct upload to Drive (spec "Key flows" 2) and listing for polling.
+// /api/receipts: direct upload to Drive (spec "Key flows" 2), listing for polling, retry of failed receipts.
 import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -11,6 +11,7 @@ import { DriveError } from "../drive/client";
 import { sha256Hex } from "../lib/encoding";
 import { log } from "../lib/log";
 import { sniffMime, type AllowedMime } from "../lib/sniff";
+import { enqueueOrPark } from "../pipeline/enqueue";
 
 /** Direct multipart limit. Larger files need the resumable flow (deferred to M5). */
 export const MAX_DIRECT_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -32,6 +33,9 @@ export function toReceiptDto(r: Receipt) {
     sizeBytes: r.sizeBytes,
     driveLink: r.driveLink,
     error: r.error,
+    /** Set while parked (AI quota or queue unavailable): the cron sends it again after this time. */
+    retryAfter: r.retryAfter,
+    reviewReasons: r.reviewReasons ? (JSON.parse(r.reviewReasons) as string[]) : null,
     createdAt: r.createdAt,
   };
 }
@@ -97,15 +101,21 @@ receiptRoutes.post("/", async (c) => {
     // Claimed in one conditional UPDATE: of two concurrent requests for the same file, only one gets the row,
     // so Drive never receives a second copy that the write-once rule would leave orphaned.
     // created_at restarts with the attempt: it is what makes an in-flight upload look fresh, and no Drive file exists yet.
+    // A failed receipt whose Drive file the user deleted (drive_file_missing) is reusable too: it gets a new file.
     const claimed = await db
       .update(receipts)
-      .set({ status: "uploading", error: null, mimeType: mime, sizeBytes: file.size, createdAt: nowIso(now) })
+      .set({ status: "uploading", error: null, mimeType: mime, sizeBytes: file.size, createdAt: nowIso(now), driveFileId: null, driveLink: null })
       .where(
         and(
           eq(receipts.id, receipt.id),
           eq(receipts.userId, user.id),
-          isNull(receipts.driveFileId),
-          or(eq(receipts.status, "failed"), and(eq(receipts.status, "uploading"), lt(receipts.createdAt, staleBefore))),
+          or(
+            and(
+              isNull(receipts.driveFileId),
+              or(eq(receipts.status, "failed"), and(eq(receipts.status, "uploading"), lt(receipts.createdAt, staleBefore))),
+            ),
+            and(eq(receipts.status, "failed"), eq(receipts.error, "drive_file_missing")),
+          ),
         ),
       )
       .returning()
@@ -173,13 +183,42 @@ receiptRoutes.post("/", async (c) => {
     return c.json({ error: code, receiptId: r.id }, 502);
   }
 
-  // M3: send { receiptId, userId } to RECEIPT_QUEUE here. Until the consumer exists the receipt waits in `queued`.
-  const saved = await db
+  await db
     .update(receipts)
-    .set({ driveFileId: uploaded.id, driveLink: uploaded.webViewLink, status: "queued", error: null })
-    .where(and(eq(receipts.id, r.id), eq(receipts.userId, user.id)))
+    .set({ driveFileId: uploaded.id, driveLink: uploaded.webViewLink, status: "queued", error: null, retryAfter: null })
+    .where(and(eq(receipts.id, r.id), eq(receipts.userId, user.id)));
+  // Sent only once the row is `queued` with its Drive file, which is what the consumer claims.
+  const sent = await enqueueOrPark(c.env.RECEIPT_QUEUE, db, { receiptId: r.id, userId: user.id });
+  const saved = await db.select().from(receipts).where(and(eq(receipts.id, r.id), eq(receipts.userId, user.id))).get();
+  log("receipt_uploaded", { receiptId: r.id, status: "queued", code: sent === "parked" ? "queue_unavailable" : null });
+  return c.json({ receipt: toReceiptDto(saved!) }, 202);
+});
+
+receiptRoutes.post("/:id/retry", async (c) => {
+  const { db } = c.var;
+  const user = c.var.user;
+  const id = c.req.param("id");
+  const scope = and(eq(receipts.id, id), eq(receipts.userId, user.id));
+  const existing = await db.select().from(receipts).where(scope).get();
+  if (!existing) return c.json({ error: "not_found" }, 404);
+  if (existing.status !== "failed" || existing.error === "unsupported_scanned_pdf") {
+    return c.json({ error: "not_retryable", receiptId: id }, 409);
+  }
+  if (user.driveStatus === "disconnected") return c.json({ error: "drive_disconnected" }, 409);
+  // No Drive file to read (the upload failed, or the user deleted it): the browser re-uploads, which reuses this row.
+  if (!existing.driveFileId || existing.error === "drive_file_missing") {
+    return c.json({ error: "reupload_required", receiptId: id }, 409);
+  }
+  // Conditional, so two clicks send one message.
+  const claimed = await db
+    .update(receipts)
+    .set({ status: "queued", error: null, retryAfter: null })
+    .where(and(scope, eq(receipts.status, "failed")))
     .returning()
     .get();
-  log("receipt_uploaded", { receiptId: r.id, status: "queued" });
+  if (!claimed) return c.json({ error: "not_retryable", receiptId: id }, 409);
+  await enqueueOrPark(c.env.RECEIPT_QUEUE, db, { receiptId: id, userId: user.id });
+  const saved = await db.select().from(receipts).where(scope).get();
+  log("receipt_retry", { receiptId: id, status: saved!.status });
   return c.json({ receipt: toReceiptDto(saved!) }, 202);
 });

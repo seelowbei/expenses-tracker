@@ -17,6 +17,9 @@ export interface Receipt {
   sizeBytes: number;
   driveLink: string | null;
   error: string | null;
+  /** Set while parked (AI quota or queue unavailable); the daily cron sends it again after this time. */
+  retryAfter: string | null;
+  reviewReasons: string[] | null;
   createdAt: string;
 }
 
@@ -55,5 +58,8 @@ export function uploadReceipt(file: File): Promise<{ receipt: Receipt }> {
   form.append("file", file);
   return call("/api/receipts", { method: "POST", body: form });
 }
+
+export const retryReceipt = (id: string) =>
+  call<{ receipt: Receipt }>(`/api/receipts/${encodeURIComponent(id)}/retry`, { method: "POST" });
 
 export const logout = () => call<void>("/auth/logout", { method: "POST" });

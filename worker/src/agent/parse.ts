@@ -1,8 +1,23 @@
 import { Extraction } from "./schema";
 
+/** Fields that passed their own schema in a reply that failed as a whole (unvalidated together). */
+export type PartialExtraction = Partial<Extraction>;
+
 export type ParseResult =
   | { ok: true; value: Extraction }
-  | { ok: false; errors: string[] };
+  | { ok: false; errors: string[]; partial: PartialExtraction };
+
+/** Keeps each normalised field that passes its own field schema; used to pre-fill review after invalid output. */
+export function partialFields(normalized: unknown): PartialExtraction {
+  if (!normalized || typeof normalized !== "object") return {};
+  const out: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(Extraction.shape)) {
+    if (!(key in normalized)) continue;
+    const r = field.safeParse((normalized as Record<string, unknown>)[key]);
+    if (r.success) out[key] = r.data;
+  }
+  return out as PartialExtraction;
+}
 
 // Pulls the first top-level JSON object out of a model reply (handles ``` fences and stray prose).
 export function extractJsonObject(text: string): string | null {
@@ -154,11 +169,11 @@ export function parseExtraction(reply: unknown): ParseResult {
   let candidate: unknown = reply;
   if (typeof reply === "string") {
     const json = extractJsonObject(reply);
-    if (!json) return { ok: false, errors: ["No JSON object found in the reply."] };
+    if (!json) return { ok: false, errors: ["No JSON object found in the reply."], partial: {} };
     try {
       candidate = JSON.parse(json);
     } catch (e) {
-      return { ok: false, errors: [`Invalid JSON: ${(e as Error).message}`] };
+      return { ok: false, errors: [`Invalid JSON: ${(e as Error).message}`], partial: {} };
     }
   }
   const normalized = normalize(candidate);
@@ -167,6 +182,7 @@ export function parseExtraction(reply: unknown): ParseResult {
   const rawDate = (normalized as { txn_date?: unknown } | null)?.txn_date;
   return {
     ok: false,
+    partial: partialFields(normalized),
     errors: result.error.issues.map((i) => {
       const path = i.path.join(".") || "(root)";
       // Show the unreadable date (capped) so eval runs reveal which printed format to support.

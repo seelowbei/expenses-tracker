@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { parseExtraction, type ParseResult } from "./parse";
+import { parseExtraction, type ParseResult, type PartialExtraction } from "./parse";
 import { IMAGE_USER_PROMPT, pdfUserPrompt, renderSystemPrompt, repairPrompt } from "./prompt";
 import type { Extraction } from "./schema";
 import {
@@ -53,13 +53,19 @@ export type ExtractErrorCode = "unsupported_scanned_pdf" | "pdf_conversion_faile
 interface Telemetry {
   /** One record per Workers AI call, in order; becomes `ai_usage` rows in M3. */
   calls: AiCallRecord[];
-  /** Raw model replies, for the audit column (raw_extraction). Never log these. */
+  /** Raw model replies, for the eval only. Never log or store these (raw_extraction holds the parsed Extraction). */
   replies: unknown[];
 }
 
 export type ExtractResult =
   | ({ ok: true; status: "done" | "needs_review"; reasons: ReviewReason[]; extraction: Extraction; draft: LedgerDraft } & Telemetry)
-  | ({ ok: false; code: ExtractErrorCode; detail?: string } & Telemetry);
+  | ({
+      ok: false;
+      code: ExtractErrorCode;
+      detail?: string;
+      /** invalid_output only: fields of the last reply that passed their own schema, to pre-fill review. */
+      partial?: PartialExtraction;
+    } & Telemetry);
 
 type Message = { role: "system" | "user" | "assistant"; content: string | Record<string, unknown>[] };
 
@@ -164,7 +170,7 @@ export async function extractReceipt(ai: AiClient, input: ReceiptInput, ctx: Ext
         { role: "assistant", content: previous },
         { role: "user", content: repairPrompt(parsed.errors) },
       ]));
-      if (!parsed.ok) return { ok: false, code: "invalid_output", detail: parsed.errors.join("; "), ...t };
+      if (!parsed.ok) return { ok: false, code: "invalid_output", detail: parsed.errors.join("; "), partial: parsed.partial, ...t };
     }
     const v = postValidate(parsed.value, ctx.categorySlugs, ctx.today, { repaired: t.calls.some((c) => c.kind === "repair") });
     return { ok: true, status: v.status, reasons: v.reasons, extraction: parsed.value, draft: v.draft, ...t };
