@@ -49,6 +49,24 @@ function fakeAi(replies: Reply[], markdown?: { format: string; data?: string }) 
   return { ai, calls };
 }
 
+/** Signal after the claim reaches AI, then let the test choose when that attempt completes. */
+function gatedAi(replies: Reply[]) {
+  const fake = fakeAi(replies);
+  let markStarted!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  const ai: AiClient = {
+    ...fake.ai,
+    run: async (model, input) => {
+      markStarted();
+      await released;
+      return fake.ai.run(model, input);
+    },
+  };
+  return { ai, started, release, calls: fake.calls };
+}
+
 async function setup(opts: { mime?: string; status?: "queued" | "processing" | "done" } = {}) {
   const user = await seedUser();
   cacheAccessToken(user.id, "at-cached", 3600);
@@ -183,6 +201,107 @@ describe("processReceipt: redelivery and scoping", () => {
   it("acks a malformed message", async () => {
     const { run } = await setup();
     expect(await run(fakeAi([]).ai, 1, { receiptId: 42 })).toEqual({ action: "ack" });
+  });
+});
+
+describe("processReceipt: overlapping deliveries", () => {
+  const latestReply = () => reply({ merchant: "Latest result", total: 32.1, total_text: "Total Paid S$32.10" });
+  const partial = JSON.stringify({ merchant: "Partial result", total: 4.5, currency: "SGD", txn_date: "??" });
+  const quota = () => new Error("4006: you have used up your daily free allocation of 10,000 neurons");
+  const capacity = () => new Error("3040: capacity temporarily exceeded");
+
+  async function expectLatestLedger(id: string) {
+    const row = await receiptRow(id);
+    expect(row).toMatchObject({ status: "done", error: null, attempts: 2, reviewReasons: null, retryAfter: null });
+    expect(JSON.parse(row!.rawExtraction!)).toMatchObject({ merchant: "Latest result", total: 32.1 });
+    expect(await ledgerFor(id)).toEqual([expect.objectContaining({ merchant: "Latest result", totalMinor: 3210, source: "ai" })]);
+  }
+
+  it.each([
+    { name: "success", replies: () => [reply()], usage: ["extract:ok"] },
+    { name: "success needing review", replies: () => [reply({ total_text: "Subtotal S$18.40" })], usage: ["extract:ok"] },
+    { name: "quota", replies: () => [quota()], usage: ["extract:quota_exceeded"] },
+    { name: "transient failure", replies: () => [capacity()], usage: ["extract:ai_error"] },
+    { name: "invalid output", replies: () => [partial, partial], usage: ["extract:invalid_output", "repair:invalid_output"] },
+  ])("acks an older $name without replacing a newer success, while keeping every AI call", async ({ replies, usage }) => {
+    const { id, run } = await setup();
+    const older = gatedAi(replies());
+    const newer = gatedAi([latestReply()]);
+    const first = run(older.ai);
+    await older.started;
+    const second = run(newer.ai, 2);
+    await newer.started;
+    newer.release();
+    expect(await second).toEqual({ action: "ack" });
+    const finished = await receiptRow(id);
+    older.release();
+    expect(await first).toEqual({ action: "ack" });
+
+    expect(await receiptRow(id)).toEqual(finished);
+    await expectLatestLedger(id);
+    const records = await usageFor(id);
+    expect(records).toHaveLength(older.calls.length + newer.calls.length);
+    expect(records.filter((r) => r.attempt === 1).map((r) => `${r.kind}:${r.outcome}`).sort()).toEqual(usage);
+    expect(records.filter((r) => r.attempt === 2)).toEqual([expect.objectContaining({ kind: "extract", outcome: "ok" })]);
+  });
+
+  it("does not insert the older success while a newer claimed attempt is still running", async () => {
+    const { id, run } = await setup();
+    const older = gatedAi([reply({ total_text: "Subtotal S$18.40" })]);
+    const newer = gatedAi([latestReply()]);
+    const first = run(older.ai);
+    await older.started;
+    const second = run(newer.ai, 2);
+    await newer.started;
+    try {
+      older.release();
+      expect(await first).toEqual({ action: "ack" });
+      expect(await receiptRow(id)).toMatchObject({ status: "processing", attempts: 2, rawExtraction: null, reviewReasons: null, retryAfter: null });
+      expect(await ledgerFor(id)).toEqual([]);
+      expect(await usageFor(id)).toEqual([expect.objectContaining({ attempt: 1, kind: "extract", outcome: "ok" })]);
+    } finally {
+      older.release();
+      newer.release();
+      await Promise.all([first, second]);
+    }
+    expect(await second).toEqual({ action: "ack" });
+    await expectLatestLedger(id);
+    const records = await usageFor(id);
+    expect(records).toHaveLength(older.calls.length + newer.calls.length);
+    expect(records.map((r) => r.attempt).sort()).toEqual([1, 2]);
+  });
+
+  it.each([
+    { name: "final failure", replies: () => [capacity()], status: "failed", error: "ai_error", usage: ["extract:ai_error"] },
+    { name: "invalid output", replies: () => [partial, partial], status: "needs_review", error: "invalid_output", usage: ["extract:invalid_output", "repair:invalid_output"] },
+    { name: "quota park", replies: () => [quota()], status: "queued", error: "ai_quota", usage: ["extract:quota_exceeded"] },
+  ])("does not insert a stale success after a newer $name", async ({ replies, status, error, usage }) => {
+    const { id, run } = await setup();
+    const older = gatedAi([reply()]);
+    const newer = gatedAi(replies());
+    const first = run(older.ai);
+    await older.started;
+    const second = run(newer.ai, 4);
+    await newer.started;
+    newer.release();
+    expect(await second).toEqual({ action: "ack" });
+    const finished = await receiptRow(id);
+    older.release();
+    expect(await first).toEqual({ action: "ack" });
+
+    expect(await receiptRow(id)).toEqual(finished);
+    expect(finished).toMatchObject({ status, error, attempts: 2, reviewReasons: null });
+    if (error === "invalid_output") {
+      expect(JSON.parse(finished!.rawExtraction!)).toMatchObject({ merchant: "Partial result", total: 4.5, currency: "SGD" });
+    } else {
+      expect(finished!.rawExtraction).toBeNull();
+    }
+    expect(finished!.retryAfter).toBe(error === "ai_quota" ? "2026-11-12T00:05:00.000Z" : null);
+    expect(await ledgerFor(id)).toEqual([]);
+    const records = await usageFor(id);
+    expect(records).toHaveLength(older.calls.length + newer.calls.length);
+    expect(records.filter((r) => r.attempt === 1)).toEqual([expect.objectContaining({ kind: "extract", outcome: "ok" })]);
+    expect(records.filter((r) => r.attempt === 2).map((r) => `${r.kind}:${r.outcome}`).sort()).toEqual(usage);
   });
 });
 

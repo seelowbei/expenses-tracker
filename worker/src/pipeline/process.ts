@@ -80,21 +80,28 @@ export async function processReceipt(deps: PipelineDeps, body: unknown, delivery
   const user = await db.select().from(users).where(eq(users.id, userId)).get();
   if (!user) return ACK; // FK cascade removes receipts with their user; nothing left to do
 
-  const scope = and(eq(receipts.id, receipt.id), eq(receipts.userId, user.id));
+  // A redelivery may claim while an older delivery is still awaiting I/O. Only the latest
+  // claim may finish, but all deliveries still record the AI calls they actually made.
+  const scope = and(eq(receipts.id, receipt.id), eq(receipts.userId, user.id), eq(receipts.attempts, receipt.attempts));
   const finish = async (
     set: Partial<Receipt>,
     extra: { result?: ExtractResult; ledger?: BatchItem<"sqlite"> } = {},
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const createdAt = now().toISOString();
     const usage = usageRows(extra.result?.calls ?? [], { userId: user.id, receiptId: receipt.id, attempt: receipt.attempts, createdAt });
-    const update = db.update(receipts).set(set).where(scope);
+    const update = db.update(receipts).set(set).where(scope).returning({ id: receipts.id });
     // One batch: ai_usage rows are never lost when the status update or ledger insert is written, and vice versa.
-    await db.batch([
+    const [updated] = await db.batch([
       update,
       ...(usage.length ? [db.insert(aiUsage).values(usage)] : []),
       ...(extra.ledger ? [extra.ledger] : []),
     ]);
+    if (!updated.length) {
+      log("receipt_superseded", { receiptId: receipt.id, attempt: receipt.attempts });
+      return false;
+    }
     log("receipt_processed", { receiptId: receipt.id, status: set.status ?? null, code: set.error ?? null, attempt: receipt.attempts });
+    return true;
   };
 
   const fail = async (code: PipelineError, result?: ExtractResult): Promise<Outcome> => {
@@ -104,7 +111,7 @@ export async function processReceipt(deps: PipelineDeps, body: unknown, delivery
 
   const transient = async (code: Transient, result?: ExtractResult): Promise<Outcome> => {
     if (delivery >= MAX_DELIVERIES) return fail(code, result);
-    await finish({ status: "queued", error: code }, { result });
+    if (!(await finish({ status: "queued", error: code }, { result }))) return ACK;
     return { action: "retry", delaySeconds: retryDelaySeconds(delivery) };
   };
 
@@ -145,24 +152,27 @@ export async function processReceipt(deps: PipelineDeps, body: unknown, delivery
     const stamp = now().toISOString();
     const ledger = db
       .insert(ledgerEntries)
-      .values({
-        id: crypto.randomUUID(),
-        userId: user.id,
-        receiptId: receipt.id,
-        categoryId: categoryIdFor(cats, draft.category_slug) ?? "sys_other",
-        merchant: draft.merchant,
-        txnDate: draft.txn_date,
-        txnTime: draft.txn_time,
-        currency: draft.currency,
-        totalMinor: draft.total_minor,
-        taxMinor: draft.tax_minor,
-        paymentMethod: draft.payment_method,
-        lineItems: JSON.stringify(draft.line_items),
-        confidence: draft.confidence,
-        source: "ai",
-        createdAt: stamp,
-        updatedAt: stamp,
-      })
+      // INSERT ... SELECT uses the same attempt guard as the receipt update in the batch.
+      // Guarding only the update would still let a superseded success insert a stale ledger row.
+      .select(db.select({
+        id: sql`${crypto.randomUUID()}`.as("id"),
+        userId: receipts.userId,
+        receiptId: receipts.id,
+        categoryId: sql`${categoryIdFor(cats, draft.category_slug) ?? "sys_other"}`.as("category_id"),
+        merchant: sql`${draft.merchant}`.as("merchant"),
+        txnDate: sql`${draft.txn_date}`.as("txn_date"),
+        txnTime: sql`${draft.txn_time}`.as("txn_time"),
+        currency: sql`${draft.currency}`.as("currency"),
+        totalMinor: sql`${draft.total_minor}`.as("total_minor"),
+        taxMinor: sql`${draft.tax_minor}`.as("tax_minor"),
+        paymentMethod: sql`${draft.payment_method}`.as("payment_method"),
+        lineItems: sql`${JSON.stringify(draft.line_items)}`.as("line_items"),
+        confidence: sql`${draft.confidence}`.as("confidence"),
+        source: sql`${"ai"}`.as("source"),
+        notes: sql`null`.as("notes"),
+        createdAt: sql`${stamp}`.as("created_at"),
+        updatedAt: sql`${stamp}`.as("updated_at"),
+      }).from(receipts).where(scope))
       .onConflictDoNothing({ target: ledgerEntries.receiptId }); // redelivery never makes a second entry
     await finish(
       {
