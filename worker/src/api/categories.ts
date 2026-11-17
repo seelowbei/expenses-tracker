@@ -1,12 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../app-env";
 import { categoriesFor } from "../db/categories";
-
-export interface CategoryDto {
-  id: string;
-  slug: string;
-  name: string;
-}
+import type { CategoryDto } from "../contracts/categories";
 
 export const categoryRoutes = new Hono<AppEnv>();
 

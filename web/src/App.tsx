@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, getMe, listReceipts, logout, retryReceipt, uploadReceipt, type Me, type Receipt } from "./api";
 import { prepareFile, PrepareError } from "./prepare";
+import { LedgerView } from "./ledger/LedgerView";
+import { clearSession } from "./query-client";
 
 const SIGN_IN_ERRORS: Record<string, string> = {
   not_allowed: "This Google account isn't allowed to use the app.",
@@ -22,8 +24,12 @@ function takeUrlError(): string | null {
 }
 
 export function App() {
+  const qc = useQueryClient();
   const [notice, setNotice] = useState(takeUrlError);
   const me = useQuery({ queryKey: ["me"], queryFn: getMe });
+  useEffect(() => {
+    if (me.isSuccess) qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" && q.queryKey[1] !== me.data?.email });
+  }, [qc, me.isSuccess, me.data?.email]);
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6">
@@ -44,7 +50,7 @@ export function App() {
       ) : me.isError ? (
         <p className="text-sm text-red-600">Couldn't reach the server. Try again shortly.</p>
       ) : me.data ? (
-        <Home me={me.data} onSignedOut={(msg) => setNotice(msg)} />
+        <Home key={me.data.email} me={me.data} onSignedOut={(msg) => setNotice(msg)} />
       ) : (
         <SignIn />
       )}
@@ -68,7 +74,7 @@ function SignIn() {
 
 function Account({ me }: { me: Me }) {
   const qc = useQueryClient();
-  const out = useMutation({ mutationFn: logout, onSettled: () => qc.setQueryData(["me"], null) });
+  const out = useMutation({ mutationFn: logout, onSettled: () => clearSession(qc) });
   return (
     <div className="ml-auto flex items-center gap-3 text-sm">
       <span className="hidden text-slate-600 sm:inline dark:text-slate-400">{me.name ?? me.email}</span>
@@ -89,8 +95,8 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
   // POLL_CAP_MS without any change, so a receipt stuck by a crash can't poll all day; an upload restarts it.
   const lastChange = useRef({ sig: "", at: 0 });
   const receipts = useQuery({
-    queryKey: ["receipts"],
-    queryFn: listReceipts,
+    queryKey: ["receipts", me.email],
+    queryFn: ({ signal }) => listReceipts(signal),
     refetchInterval: (q) => {
       const data = q.state.data;
       if (!data) return false;
@@ -99,6 +105,14 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
       return data.some(isWorking) && Date.now() - lastChange.current.at < POLL_CAP_MS ? POLL_MS : false;
     },
   });
+
+  const completed = receipts.data?.filter((r) => r.status === "done" || r.status === "needs_review").map((r) => `${r.id}:${r.status}`).join("|");
+  useEffect(() => {
+    if (completed !== undefined) {
+      void qc.invalidateQueries({ queryKey: ["ledger", me.email] });
+      void qc.invalidateQueries({ queryKey: ["ledger-detail", me.email] });
+    }
+  }, [completed, qc, me.email]);
 
   const setState = (i: number, s: Partial<UploadState>) => setUploads((u) => u.map((x, j) => (j === i ? { ...x, ...s } : x)));
 
@@ -117,7 +131,7 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
         setState(i, { state: "done" });
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
-          qc.setQueryData(["me"], null);
+          clearSession(qc);
           onSignedOut(SIGN_IN_ERRORS[e.code === "drive_disconnected" || e.code === "not_allowed" ? e.code : "auth_expired"]!);
           return;
         }
@@ -166,6 +180,8 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
           </ul>
         )}
       </section>
+
+      <LedgerView account={me.email} />
 
       <section>
         <h2 className="mb-3 font-medium">Recent receipts</h2>

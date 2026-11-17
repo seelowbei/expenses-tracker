@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { categories, ledgerEntries, receipts, type NewLedgerEntry } from "../src/db/schema";
 import { db, makeApp, seedUser } from "./helpers";
-import { parseLedgerQuery } from "../src/contracts/ledger";
+import { parseLedgerQuery } from "../src/api/ledger-query";
 
 async function entry(userId: string, values: Partial<NewLedgerEntry> = {}) {
   const row: NewLedgerEntry = {
