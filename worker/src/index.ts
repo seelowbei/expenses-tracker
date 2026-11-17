@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { aiClient } from "./agent/extract";
 import { meRoutes } from "./api/me";
+import { categoryRoutes } from "./api/categories";
+import { ledgerRoutes } from "./api/ledger";
 import { receiptRoutes } from "./api/receipts";
 import type { AppDeps, AppEnv } from "./app-env";
 import { checkOrigin, requireUser } from "./auth/middleware";
@@ -31,6 +33,8 @@ export function createApp(deps: AppDeps = defaultDeps) {
   // Everything else under /api needs a session; state-changing routes also need our Origin.
   app.use("/api/*", checkOrigin, requireUser);
   app.route("/api/me", meRoutes);
+  app.route("/api/categories", categoryRoutes);
+  app.route("/api/ledger", ledgerRoutes);
   app.route("/api/receipts", receiptRoutes);
   app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
 
