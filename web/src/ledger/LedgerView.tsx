@@ -45,10 +45,15 @@ export function LedgerView({ account }: { account: string }) {
         </label>
         <button className={control} aria-label="Next month" disabled={month === "9999-12"} onClick={() => selectMonth(shiftMonth(month, 1))}>→</button>
         <label className="w-full text-sm sm:w-auto">Category
-          <select className={`${control} mt-1 block w-full sm:max-w-56`} value={category} disabled={categories.isPending || categories.isError} onChange={(e) => { setCategory(e.target.value); resetPage(); }}>
-            <option value="">All categories</option>
-            {categories.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <span className="relative mt-1 block">
+            <select className={`${control} block w-full appearance-none pr-10 sm:max-w-56 forced-colors:appearance-auto`} value={category} disabled={categories.isPending || categories.isError} onChange={(e) => { setCategory(e.target.value); resetPage(); }}>
+              <option value="">All categories</option>
+              {categories.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <svg aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 forced-colors:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </span>
         </label>
       </div>
       {categories.isError && <p role="alert" className="text-sm">Couldn't load categories. <button className="underline" onClick={() => void categories.refetch()}>Retry categories</button></p>}
