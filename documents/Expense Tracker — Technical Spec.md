@@ -337,7 +337,7 @@ The response is `{ entries, totals, nextCursor }`. Entries use the documented sn
 
 **Totals display (November 17, 2026):** the browser combines the API's monthly totals across the selected range into one grand total per currency, with one subtotal per category within that currency. Category review counts are combined across months and remain visible. These sums use exact integer minor units, including when the combined sum exceeds JavaScript's safe-number boundary. Filters still apply to every total, independently of pagination; currencies are never combined or converted.
 
-M4.1 exposes read-only browsing and details; editing/confirmation, the complete review inbox, category creation and deletion follow in M4.2–M4.5. Existing upload, receipt status and retry behavior remains available during this rollout.
+M4.1 provides browsing and details; M4.2 adds existing-entry editing and confirmation. The complete review inbox, category creation and deletion follow in M4.3–M4.5. Existing upload, receipt status and retry behavior remains available during this rollout.
 
 ## Security & privacy
 

@@ -1,6 +1,6 @@
 # M4 plan — Ledger and review
 
-November 16, 2026. **M4.1 implemented and locally verified November 17, 2026; PR review and staging checks remain. M4.2–M4.5 remain planned.**
+November 16, 2026. **M4.1 merged. M4.2 implemented and locally verified November 17, 2026; PR review and staging checks remain. M4.3–M4.5 remain planned.**
 
 Source: [Technical spec](../documents/Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. Implementation checklist: [todo.md](todo.md).
 
@@ -17,13 +17,13 @@ M4 does not include manual expense creation without a receipt, category rename/d
 - `worker/src/db/schema.ts` already has ledger entries, categories, receipt review reasons and raw extraction. Ledger entries have nullable transaction time, notes and receipt association; a unique receipt ID prevents duplicate entries.
 - `worker/src/db/categories.ts` already returns system defaults plus the signed-in user's categories. Custom categories take precedence over system categories with the same slug when resolving AI output.
 - `worker/src/pipeline/process.ts` inserts valid AI results, including results requiring review. Invalid output has no ledger row. The consumer claims only queued/processing receipts; terminal receipts are ignored, and writes are guarded by attempt number.
-- Only `/api/me` and receipt routes are implemented. Receipt listing returns the newest 50 and omits raw extraction and the associated ledger entry. This list alone cannot reliably surface an older review backlog.
-- `web/src/App.tsx` contains sign-in, uploads, recent receipts and bounded status polling. `web/src/api.ts` holds typed calls. There is no ledger UI or web test runner.
+- Category listing, bounded ledger list/detail and existing-entry PATCH are implemented alongside `/api/me` and the receipt routes. Receipt listing still returns the newest 50 and omits raw extraction and the associated ledger entry; the complete review backlog remains M4.3.
+- `web/src/App.tsx` contains sign-in, uploads, recent receipts and bounded status polling. `web/src/api.ts` holds typed calls; `web/src/ledger/` provides browsing and an existing-entry editor. Pure form/money logic is tested by the existing Worker test runner; browser verification uses synthetic data.
 - Workerd tests already supply authenticated users, fake Google/AI clients and D1 interleaving helpers. Reuse them for isolation and concurrent-write cases.
 
 ## Decisions and proposals
 
-Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The remaining M4.2–M4.5 details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
+Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The M4.2 existing-entry write proposals were adopted with the November 17 implementation request and recorded in the technical spec. Remaining M4.3–M4.5 details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
 
 ### 1. Complete the review API
 
@@ -158,4 +158,4 @@ After CI deploys M4, check representative ledger read and edit CPU against the p
 | Large lists exceed CPU/response bounds | Pagination, SQL aggregates, bounded ranges and detail-on-demand; verify in staging. |
 | Spec lacks new route, deletion lifecycle and review-tracking details | Review these proposals and update the spec before dependent code. |
 
-No production deployment, infrastructure mutation or implementation is part of this planning change.
+M4.2 local evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). Deployment remains CI-only; no infrastructure mutation or deployment was performed during implementation.

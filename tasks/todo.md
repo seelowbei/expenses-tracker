@@ -1,6 +1,6 @@
 # M4 implementation checklist
 
-Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; M4.1 is implemented and locally verified on November 17, 2026; M4.2–M4.5 remain unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
+Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; M4.1 is implemented and locally verified on November 17, 2026; M4.2 is implemented and locally verified; M4.3–M4.5 remain unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
 
 ## PR delivery order
 
@@ -14,16 +14,16 @@ Design and decisions: [plan.md](plan.md). The user confirmed explicit review tra
 
 Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verification and documentation run throughout; each PR must pass its own relevant checks before merge. Numbered tasks are identifiers; follow the delivery order above. Checkpoints below apply when their associated work is complete, even where task numbering differs from merge order.
 
-M4.1 status: category and ledger read contracts are implemented in the technical spec. Tasks 3–5 and Checkpoint B are complete locally; PR review and staging verification remain. Task 1’s write contracts and the review timestamp migration belong to M4.2. Verification evidence: [M4.1 verification](../documents/M4.1%20verification.md).
+M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20verification.md). M4.2 completes the existing-entry part of Task 1, Tasks 2, 7–8 and Checkpoint C locally. Evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). M4.3–M4.5 contracts remain to be resolved with their implementations.
 
 ## Task 1 — Confirm decisions and define write contracts
 
 **Description:** Reconcile the plan's API additions, review completion, deletion lifecycle, filtering and category rules with the technical spec, then define the human-edit contract using appropriate existing extraction field schemas.
 
 **Acceptance criteria:**
-- [ ] Carry the confirmed `reviewed_at` decision into the spec and resolve the remaining proposals before dependent implementation.
-- [ ] Validate allowed fields, actual dates/time, safe integer amounts, nullable fields and explicit confirmation; reject unknown fields and define stable errors/body limits.
-- [ ] Export browser-consumable contract types without Worker runtime dependencies; document response shapes, cursors and optimistic concurrency.
+- [x] Carry the confirmed `reviewed_at` decision and M4.2 existing-entry write proposals into the spec before dependent implementation. M4.3–M4.5 proposals remain scoped to their PRs.
+- [x] Validate allowed fields, actual dates/time, safe integer amounts, nullable fields and explicit confirmation; reject unknown fields and define stable errors/body limits.
+- [x] Export browser-consumable existing-entry contract types without Worker runtime dependencies; document response shapes and optimistic concurrency (read cursors documented in M4.1).
 
 **Verification:** Focused contract tests, `pnpm --filter worker typecheck`, `pnpm --filter web typecheck`.
 
@@ -36,9 +36,9 @@ M4.1 status: category and ledger read contracts are implemented in the technical
 **Description:** Add the user-approved nullable review timestamp without altering existing values or extraction behavior.
 
 **Acceptance criteria:**
-- [ ] Add nullable `reviewed_at` through the next available additive migration; keep Drizzle and spec aligned.
-- [ ] Existing AI rows remain readable with null review time; pipeline inserts remain unchanged.
-- [ ] Local migration applies to both a fresh DB and a DB with existing entries, without data loss.
+- [x] Add nullable `reviewed_at` through the next available additive migration; keep Drizzle and spec aligned.
+- [x] Existing AI rows remain readable with null review time; pipeline behavior is unchanged; its column-complete insert explicitly writes null review time.
+- [x] Local migration applies to both a fresh DB and a DB with existing entries, without data loss.
 
 **Verification:** Local migrations only; worker typecheck and relevant DB/pipeline tests.
 
@@ -63,8 +63,8 @@ M4.1 status: category and ledger read contracts are implemented in the technical
 
 ## Checkpoint A — Contracts and data foundation
 
-- [ ] Plan decisions and spec agree; no unresolved decision has been silently implemented.
-- [ ] Relevant tests and worker/web typechecks pass; existing upload/pipeline behavior still passes.
+- [x] M4.1–M4.2 decisions and spec agree; no unresolved decision has been silently implemented.
+- [x] Relevant tests and worker/web typechecks pass; existing upload/pipeline behavior still passes.
 
 ## Task 4 — Read ledger pages with complete totals
 
@@ -121,9 +121,9 @@ M4.1 status: category and ledger read contracts are implemented in the technical
 **Description:** Implement PATCH for corrections and explicit review confirmation, with concurrent-edit protection.
 
 **Acceptance criteria:**
-- [ ] Save allowed fields and finish pending review in one conditional batch; preserve original extraction, reasons and usage.
-- [ ] Apply source/review-time rules, verify category ownership, preserve untouched optional fields and reject invalid currency/amount/date values.
-- [ ] Stale writes, active processing, failed batches and double submissions cannot overwrite newer values or partially finish review.
+- [x] Save allowed fields and finish pending review in one conditional batch; preserve original extraction, reasons and usage.
+- [x] Apply source/review-time rules, verify category ownership, preserve untouched optional fields and reject invalid currency/amount/date values.
+- [x] Stale writes, active processing, failed batches and double submissions cannot overwrite newer values or partially finish review.
 
 **Verification:** Focused write tests with D1 interleaving/failure cases and two-user/Origin tests; worker typecheck. Include unchanged confirmation, signed discount items and null time/tax.
 
@@ -136,9 +136,9 @@ M4.1 status: category and ledger read contracts are implemented in the technical
 **Description:** Build the reusable editor opened from a ledger entry, including exact decimal input handling and clear original warnings. The separate pending-review inbox belongs to M4.3.
 
 **Acceptance criteria:**
-- [ ] Edit every supported field, including time, tax, line items and notes; open the Drive original and confirm unchanged values explicitly.
-- [ ] Exact decimal-to-minor conversion handles SGD, JPY and a three-decimal currency; currency changes reconfirm amounts, and unsafe/over-precision values block save.
-- [ ] Keyboard/mobile use, dirty-close confirmation, retained form state on failures and conflicts work; successful save updates totals/review state without reload.
+- [x] Edit every supported field, including time, tax, line items and notes; open the Drive original and confirm unchanged values explicitly.
+- [x] Exact decimal-to-minor conversion handles SGD, JPY and a three-decimal currency; currency changes reconfirm amounts, and unsafe/over-precision values block save.
+- [x] Keyboard/mobile use, dirty-close confirmation, retained form state on failures and conflicts work; successful save updates totals/review state without reload.
 
 **Verification:** Pure conversion/form tests using the existing test tooling (no real AI), worker/web typecheck, SPA build and Chrome checks at phone/desktop widths. If wiring tests adds more files, split that small prerequisite first.
 
@@ -148,8 +148,8 @@ M4.1 status: category and ledger read contracts are implemented in the technical
 
 ## Checkpoint C — Existing-entry review works
 
-- [ ] Full tests, worker/web typechecks and SPA build pass.
-- [ ] Review saves correctly, including unchanged confirmation, and failed/conflicting saves preserve user input.
+- [x] Full tests, worker/web typechecks and SPA build pass.
+- [x] Review saves correctly, including unchanged confirmation, and failed/conflicting saves preserve user input.
 
 ## Task 9 — Complete review when no entry exists
 
