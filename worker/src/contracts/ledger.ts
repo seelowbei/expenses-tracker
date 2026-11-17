@@ -39,6 +39,7 @@ export interface LedgerDetail extends LedgerSummary {
   confidence: number | null;
   created_at: string;
   updated_at: string;
+  reviewed_at: string | null;
   review_reasons: string[] | null;
 }
 
