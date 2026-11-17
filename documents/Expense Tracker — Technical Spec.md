@@ -322,6 +322,8 @@ The response is `{ entries, totals, nextCursor }`. Entries use the documented sn
 
 `GET /api/ledger/:id` returns `{ entry }` with the summary fields plus tax, payment method, normalized line items, notes, source, confidence, timestamps and original review reasons. Missing and other-user entries return 404. All joins enforce session ownership (or system-default category visibility); missing Drive files never prevent ledger reads. These routes make no Drive or AI calls.
 
+**Totals display (November 17, 2026):** the browser combines the API's monthly totals across the selected range into one grand total per currency, with one subtotal per category within that currency. Category review counts are combined across months and remain visible. These sums use exact integer minor units, including when the combined sum exceeds JavaScript's safe-number boundary. Filters still apply to every total, independently of pagination; currencies are never combined or converted.
+
 M4.1 exposes read-only browsing and details; editing/confirmation, the complete review inbox, category creation and deletion follow in M4.2–M4.5. Existing upload, receipt status and retry behavior remains available during this rollout.
 
 ## Security & privacy

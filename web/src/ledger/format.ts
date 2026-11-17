@@ -1,7 +1,7 @@
 import { currencyExponent } from "../../../worker/src/agent/money";
 
 /** Keep exact cents even near MAX_SAFE_INTEGER; division as Number would round them. */
-export function formatMoney(minor: number, currency: string): string {
+export function formatMoney(minor: number | bigint, currency: string): string {
   const exponent = currencyExponent(currency);
   const value = BigInt(minor);
   const absolute = value < 0n ? -value : value;

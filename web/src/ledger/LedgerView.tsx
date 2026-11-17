@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ApiError, listCategories, listLedger, type LedgerSummary } from "../api";
 import { EntryDetail } from "./EntryDetail";
 import { formatMoney, localMonth, monthRange, shiftMonth } from "./format";
+import { summarizeTotals } from "./totals";
 
 const control = "min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900";
 
@@ -78,12 +79,20 @@ export function LedgerView({ account }: { account: string }) {
           {ledger.data.totals.length === 0 ? <p role="status" className="rounded-lg border border-dashed border-slate-300 p-5 text-sm dark:border-slate-700">No expenses in this range. Upload a receipt or choose another month.</p> : (
             <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
               <h3 className="font-medium">Totals for this range</h3>
-              <ul className="space-y-2 text-sm">
-                {ledger.data.totals.map((t) => <li key={`${t.category_id}:${t.month}:${t.currency}`} className="flex flex-wrap justify-between gap-x-4">
-                  <span>{t.category_name} <span className="text-slate-600 dark:text-slate-400">· {t.month}</span>{t.needs_review_count > 0 && <span className="block text-xs text-amber-800 dark:text-amber-300">Includes {t.needs_review_count} needing review</span>}</span>
-                  <span className="font-medium tabular-nums">{formatMoney(t.total_minor, t.currency)}</span>
-                </li>)}
-              </ul>
+              <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                {summarizeTotals(ledger.data.totals).map((group) => <div key={group.currency} className="space-y-3 py-3">
+                  <h4 className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 font-semibold">
+                    <span>{group.currency} grand total</span>
+                    <span className="ml-auto text-right tabular-nums">{formatMoney(group.total_minor, group.currency)}</span>
+                  </h4>
+                  <dl aria-label={`${group.currency} category subtotals`} className="space-y-2 text-sm">
+                    {group.categories.map((category) => <div key={category.category_id} className="flex flex-wrap justify-between gap-x-4">
+                      <dt className="min-w-0 break-words text-slate-600 dark:text-slate-400">{category.category_name}{category.needs_review_count > 0 && <span className="block text-xs text-amber-800 dark:text-amber-300">Includes {category.needs_review_count} needing review</span>}</dt>
+                      <dd className="ml-auto text-right tabular-nums">{formatMoney(category.total_minor, group.currency)}</dd>
+                    </div>)}
+                  </dl>
+                </div>)}
+              </div>
               <p className="text-xs text-slate-600 dark:text-slate-400">Totals include all matching entries, across every page.</p>
             </div>
           )}
