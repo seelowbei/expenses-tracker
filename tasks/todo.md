@@ -1,6 +1,6 @@
 # M4 implementation checklist
 
-Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; all implementation items are unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
+Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; M4.1 is implemented and locally verified on November 17, 2026; M4.2–M4.5 remain unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
 
 ## PR delivery order
 
@@ -13,6 +13,8 @@ Design and decisions: [plan.md](plan.md). The user confirmed explicit review tra
 | M4.5 — Delete ledger entries | Task 11 and final combined verification. |
 
 Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verification and documentation run throughout; each PR must pass its own relevant checks before merge. Numbered tasks are identifiers; follow the delivery order above. Checkpoints below apply when their associated work is complete, even where task numbering differs from merge order.
+
+M4.1 status: category and ledger read contracts are implemented in the technical spec. Tasks 3–5 and Checkpoint B are complete locally; PR review and staging verification remain. Task 1’s write contracts and the review timestamp migration belong to M4.2. Verification evidence: [M4.1 verification](../documents/M4.1%20verification.md).
 
 ## Task 1 — Confirm decisions and define write contracts
 
@@ -49,9 +51,9 @@ Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verificati
 **Description:** Add the authenticated category read endpoint using the existing category visibility/resolution helpers.
 
 **Acceptance criteria:**
-- [ ] Return system defaults plus the user's own categories, deterministically ordered.
-- [ ] Another user's categories never appear; existing slug collisions retain documented resolution behavior.
-- [ ] Missing session returns 401; DTOs expose only selector fields, not user information.
+- [x] Return system defaults plus the user's own categories, deterministically ordered.
+- [x] Another user's categories never appear; existing slug collisions retain documented resolution behavior.
+- [x] Missing session returns 401; DTOs expose only selector fields, not user information.
 
 **Verification:** `pnpm --filter worker test -- test/categories.test.ts`; worker typecheck.
 
@@ -69,9 +71,9 @@ Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verificati
 **Description:** Implement ledger list/detail queries, bounded filters and SQL totals across the full filtered result.
 
 **Acceptance criteria:**
-- [ ] Sort by date/time with null times last and an ID tie-breaker; page boundaries do not skip or duplicate stable rows.
-- [ ] Totals group by category/month/currency over every matching row, not just the page; pending existing entries are distinguishable.
-- [ ] Scope entries, receipt joins and category selections to the user; enforce date/range/limit bounds and safe sums.
+- [x] Sort by date/time with null times last and an ID tie-breaker; page boundaries do not skip or duplicate stable rows.
+- [x] Totals group by category/month/currency over every matching row, not just the page; pending existing entries are distinguishable.
+- [x] Scope entries, receipt joins and category selections to the user; enforce date/range/limit bounds and safe sums.
 
 **Verification:** Ledger read tests cover two users, month boundaries, category filtering, mixed currencies, absent receipt links, null times and more than 50 entries; worker typecheck.
 
@@ -84,9 +86,9 @@ Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verificati
 **Description:** Add the first working month/category ledger view while keeping upload and status behavior available.
 
 **Acceptance criteria:**
-- [ ] Show currency-labelled totals, grouped entries, time when known, provisional review badges and accessible page navigation.
-- [ ] Show loading, empty and retry states; date/category changes reset pagination and fetch correctly scoped data.
-- [ ] Clear ledger caches/forms on sign-out or account change; receipt completion and ledger focus refresh data.
+- [x] Show currency-labelled totals, grouped entries, time when known, provisional review badges and accessible page navigation.
+- [x] Show loading, empty and retry states; date/category changes reset pagination and fetch correctly scoped data.
+- [x] Clear ledger caches/forms on sign-out or account change; receipt completion and ledger focus refresh data.
 
 **Verification:** Worker/web typecheck and SPA build; Chrome check month/category changes, a second page, upload completion and account switching with synthetic data.
 
@@ -96,8 +98,8 @@ Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verificati
 
 ## Checkpoint B — Useful ledger
 
-- [ ] Full tests, worker/web typechecks and SPA build pass.
-- [ ] Browser shows correct totals for paginated multi-currency data and no cross-user cached content.
+- [x] Full tests, worker/web typechecks and SPA build pass.
+- [x] Browser shows correct totals for paginated multi-currency data and no cross-user cached content.
 
 ## Task 6 — Expose the full review backlog
 

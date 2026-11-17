@@ -1,6 +1,6 @@
 # M4 plan — Ledger and review
 
-November 16, 2026. **Draft for review; implementation has not started.**
+November 16, 2026. **M4.1 implemented and locally verified November 17, 2026; PR review and staging checks remain. M4.2–M4.5 remain planned.**
 
 Source: [Technical spec](../documents/Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. Implementation checklist: [todo.md](todo.md).
 
@@ -23,7 +23,7 @@ M4 does not include manual expense creation without a receipt, category rename/d
 
 ## Decisions and proposals
 
-Explicit review confirmation tracking was accepted by the user on November 16, 2026. The remaining details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
+Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The remaining M4.2–M4.5 details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
 
 ### 1. Complete the review API
 
