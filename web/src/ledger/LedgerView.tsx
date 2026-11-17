@@ -1,3 +1,5 @@
+import type { LedgerDetail } from "../../../worker/src/contracts/ledger";
+import { EntryEditor } from "./EntryEditor";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError, listCategories, listLedger, type LedgerSummary } from "../api";
@@ -8,6 +10,8 @@ import { summarizeTotals } from "./totals";
 const control = "min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900";
 
 export function LedgerView({ account }: { account: string }) {
+  const [editing, setEditing] = useState<LedgerDetail | null>(null);
+  const [notice, setNotice] = useState("");
   const [month, setMonth] = useState(localMonth);
   const [range, setRange] = useState(() => monthRange(localMonth()));
   const [category, setCategory] = useState("");
@@ -35,8 +39,10 @@ export function LedgerView({ account }: { account: string }) {
 
   return (
     <section aria-labelledby="ledger-heading" className="space-y-4">
+      {notice && <p role="status" className="text-sm text-teal-700 dark:text-teal-400">{notice}</p>}
+      {editing && <EntryEditor entry={editing} account={account} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setNotice("Review saved. Ledger totals updated."); }} />}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="ledger-heading" className="text-lg font-semibold">Ledger</h2>
+        <h2 id="ledger-heading" tabIndex={-1} className="text-lg font-semibold">Ledger</h2>
         <button className={control} onClick={() => { resetPage(); void ledger.refetch(); }} disabled={ledger.isFetching}>Refresh ledger</button>
       </div>
       <div className="flex flex-wrap items-end gap-2">
@@ -104,7 +110,7 @@ export function LedgerView({ account }: { account: string }) {
                   <span className="min-w-0 flex-1 break-words"><span className="font-medium">{e.merchant}</span><span className="block text-xs text-slate-600 dark:text-slate-400">{e.txn_date}{e.txn_time ? ` · ${e.txn_time}` : " · Time unknown"}</span>{e.receipt_status === "needs_review" && <span className="block text-xs text-amber-800 dark:text-amber-300">Needs review</span>}</span>
                   <span className="text-right tabular-nums">{formatMoney(e.total_minor, e.currency)}<span className="block text-xs text-teal-700 dark:text-teal-400">{selected === e.id ? "Hide details" : "View details"}</span></span>
                 </button>
-                <div id={`entry-${e.id}`} hidden={selected !== e.id}>{selected === e.id && <EntryDetail id={e.id} account={account} />}</div>
+                <div id={`entry-${e.id}`} hidden={selected !== e.id}>{selected === e.id && <EntryDetail id={e.id} account={account} onEdit={(entry) => { setEditing(entry); setNotice(""); }} />}</div>
               </li>)}
             </ul>
           </div>)}
