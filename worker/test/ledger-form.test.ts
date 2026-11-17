@@ -18,7 +18,8 @@ describe("exact human money inputs", () => {
   });
   it("round-trips an unchanged entry, including null optional fields", () => {
     const result = formPatch(entryForm(entry), entry, false);
-    expect(result).toMatchObject({ patch: { confirm_review: true, total_minor: 1234, tax_minor: null, txn_time: null, line_items: null, notes: null } });
+    expect(result).toEqual({ patch: { confirm_review: true, expected_updated_at: entry.updated_at } });
+    expect(formPatch(entryForm({ ...entry, notes: "  Original note  " }), { ...entry, notes: "  Original note  " }, false)).toEqual(result);
   });
   it("requires currency reconfirmation and never reinterprets saved minor units", () => {
     const form = { ...entryForm(entry), currency: "KWD" };

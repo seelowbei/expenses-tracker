@@ -45,5 +45,11 @@ export function formPatch(form: EntryForm, entry: LedgerDetail, currencyConfirme
     errors[path] = "Enter a valid value.";
   }
   if (Object.keys(errors).length || !values.success) return { errors };
-  return { patch: { ...values.data, expected_updated_at: entry.updated_at, confirm_review: true, ...(currencyChanged ? { confirm_currency: true } : {}) } };
+  const initial = entryForm(entry);
+  const fields = Object.fromEntries(Object.entries(values.data).filter(([key]) => {
+    if (currencyChanged && ["total_minor", "tax_minor", "line_items"].includes(key)) return true;
+    const field = (key === "total_minor" ? "total" : key === "tax_minor" ? "tax" : key) as keyof EntryForm;
+    return JSON.stringify(form[field]) !== JSON.stringify(initial[field]);
+  }));
+  return { patch: { ...fields, expected_updated_at: entry.updated_at, confirm_review: true, ...(currencyChanged ? { confirm_currency: true } : {}) } };
 }

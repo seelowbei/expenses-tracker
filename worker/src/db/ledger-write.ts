@@ -29,16 +29,24 @@ export async function saveLedgerEntry(db: Db, userId: string, id: string, patch:
   const parsed = LedgerFields.safeParse({ ...before, ...edits });
   if (!parsed.success) return "invalid_body";
   const values = parsed.data;
-  const changed = (Object.keys(values) as (keyof typeof values)[]).some((key) => JSON.stringify(before[key]) !== JSON.stringify(values[key]));
+  const changed = (Object.keys(edits) as (keyof typeof values)[]).some((key) => {
+    if (key !== "line_items") return before[key] !== values[key];
+    // Compare values, not JSON property order; omitted stored fields stay byte-for-byte intact.
+    const items = values.line_items;
+    if (!Array.isArray(storedItems) || items === null) return storedItems !== items;
+    return storedItems.length !== items.length || items.some((item, i) =>
+      storedItems[i]?.description !== item.description || storedItems[i]?.amount_minor !== item.amount_minor);
+  });
   const stamp = new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString();
   const eligibleReceipt = db.select({ id: receipts.id }).from(receipts).where(and(
     eq(receipts.id, ledger.receiptId), eq(receipts.userId, userId), inArray(receipts.status, ["done", "needs_review"]),
   ));
   const [saved] = await db.batch([
     db.update(ledger).set({
-      merchant: values.merchant, txnDate: values.txn_date, txnTime: values.txn_time, currency: values.currency,
+      merchant: edits.merchant === undefined ? current.merchant : values.merchant, txnDate: values.txn_date, txnTime: values.txn_time, currency: values.currency,
       totalMinor: values.total_minor, taxMinor: values.tax_minor, categoryId: values.category_id,
-      paymentMethod: values.payment_method, lineItems: values.line_items === null ? null : JSON.stringify(values.line_items), notes: values.notes,
+      paymentMethod: values.payment_method, lineItems: edits.line_items === undefined ? current.lineItems : values.line_items === null ? null : JSON.stringify(values.line_items),
+      notes: edits.notes === undefined ? current.notes : values.notes,
       source: changed && current.source === "ai" ? "ai_edited" : current.source, reviewedAt: stamp, updatedAt: stamp,
     }).where(and(owned, eq(ledger.updatedAt, expected_updated_at),
       or(isNull(ledger.receiptId), exists(eligibleReceipt)),

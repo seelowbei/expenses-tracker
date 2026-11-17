@@ -42,6 +42,23 @@ describe("existing entry saves", () => {
     expect((await f.patch({ expected_updated_at: stamp, merchant: "Stale" })).status).toBe(409);
     expect((await f.row())?.merchant).toBe("Synthetic shop");
   });
+  it("preserves omitted values and treats reordered line-item keys as unchanged", async () => {
+    const f = await fixture();
+    const lineItems = '[{"amount_minor":1234,"description":"Item"}]';
+    await db().update(ledgerEntries).set({ notes: "  Original note  ", lineItems }).where(eq(ledgerEntries.id, f.id));
+    expect((await f.patch({ expected_updated_at: stamp, confirm_review: true })).status).toBe(200);
+    const row = await f.row();
+    expect(row).toMatchObject({ notes: "  Original note  ", lineItems, source: "ai" });
+    expect((await f.patch({ expected_updated_at: row!.updatedAt, line_items: [{ description: "Item", amount_minor: 1234 }] })).status).toBe(200);
+    expect((await f.row())?.source).toBe("ai");
+  });
+  it("never writes an entry associated with another user's receipt", async () => {
+    const f = await fixture(); const other = await seedUser({ email: "bob@example.com" });
+    await db().update(receipts).set({ userId: other.id }).where(eq(receipts.id, f.id));
+    expect((await f.patch({ expected_updated_at: stamp, total_minor: 9999 })).status).toBe(404);
+    expect((await f.row())?.totalMinor).toBe(1234);
+    expect((await f.receipt())?.status).toBe("needs_review");
+  });
   it("requires explicit monetary confirmation when changing currency", async () => {
     const f = await fixture();
     expect(await (await f.patch({ expected_updated_at: stamp, currency: "JPY" })).json()).toEqual({ error: "currency_confirmation_required" });
