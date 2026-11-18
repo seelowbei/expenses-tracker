@@ -11,6 +11,7 @@ import { DriveError } from "../drive/client";
 import { sha256Hex } from "../lib/encoding";
 import { log } from "../lib/log";
 import { sniffMime, type AllowedMime } from "../lib/sniff";
+import { receiptReviewRoutes } from "./receipt-review";
 import { receiptFileRoutes } from "./receipt-file";
 import { reviewDraft } from "../contracts/review-draft";
 import type { ReviewDetail } from "../contracts/review";
@@ -59,6 +60,7 @@ const StatusQuery = z
 
 export const receiptRoutes = new Hono<AppEnv>();
 receiptRoutes.route("/", receiptFileRoutes);
+receiptRoutes.route("/", receiptReviewRoutes);
 
 receiptRoutes.get("/", async (c) => {
   const status = StatusQuery.safeParse(c.req.query("status"));
