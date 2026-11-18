@@ -166,6 +166,139 @@ M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20ver
 
 **Likely files:** `worker/src/api/receipt-review.ts` (mounted from receipt routes), `worker/src/api/receipts.ts`, `worker/test/review-save.test.ts`, `web/src/api.ts`, `web/src/ledger/EntryEditor.tsx`. Split DB helpers into a preceding task if the handler needs a separate module.
 
+## M4.3 incremental checklist — November 18, 2026
+
+This expands Tasks 6 and 9 on `codex/m4-3`; their parent checkboxes remain open until all relevant slices pass. Planning only: no implementation or runtime verification is claimed. Contracts and rationale are in [the M4.3 execution plan](plan.md#m43-execution-plan--november-18-2026). M4.4/M4.5 tasks below remain unchanged.
+
+Each slice ends with focused tests, affected typechecks/build, diff review and an atomic commit. Run `pnpm --filter worker typecheck` for Worker changes and `pnpm --filter web typecheck` for shared contracts/browser changes; run `pnpm --filter web build` when browser runtime code changes. Pure web helpers use the existing Worker Vitest runner. Neither package defines a lint script; do not invent one. File lists below count substantive implementation/test files; update spec/checklist evidence with the corresponding slice. Split further before exceeding roughly five substantive files.
+
+### 4.3-0 — Adopt review contracts
+
+**Description:** Carry reviewed M4.3 decisions into the technical spec, then define browser-safe review DTOs and the complete create-request schema using `LedgerFields`.
+
+**Acceptance criteria:**
+- [ ] Spec records exact pagination/detail/create shapes, partial omission rules, body limits and conflict codes before dependent implementation.
+- [ ] Contracts distinguish partial drafts from complete human saves; reject unknown/write-protected fields and require valid human fields.
+- [ ] DTO types introduce no database/Worker bindings into browser imports; existing PATCH behavior stays intact.
+
+**Verification:** `pnpm --filter worker test -- test/review-contracts.test.ts test/ledger-contracts.test.ts`; worker/web typechecks; inspect spec-to-contract alignment.
+
+**Dependencies:** Plan review/adoption. **Scope:** Medium. **Likely files:** technical spec, `worker/src/contracts/review.ts`, `worker/test/review-contracts.test.ts`. **Commit:** `feat: define receipt review contracts`.
+
+### 4.3-1 — Read safe receipt drafts
+
+**Description:** Add owned receipt detail with an associated entry ID or independently validated partial fields; harden receipt reason decoding as required for this path.
+
+**Acceptance criteria:**
+- [ ] Owned detail selects existing-entry versus eligible missing-entry mode; foreign/missing receipt IDs return 404 without leaking entry IDs or categories.
+- [ ] Malformed/oversized/non-object extraction produces an empty draft; individual invalid fields stay blank. Money conversion never rounds, invents currency or accepts unsafe values; malformed item collections are omitted as a whole.
+- [ ] Raw extraction never reaches the browser, malformed reason JSON cannot crash receipt reads, and detail calls neither Drive nor AI.
+
+**Verification:** `pnpm --filter worker test -- test/review-read.test.ts test/review-draft.test.ts test/receipts.test.ts`; worker/web typechecks. Cover impossible dates, missing values, foreign/unknown slugs, long strings, exponent notation, SGD/JPY/KWD, precision/overflow, signed discounts and two users.
+
+**Dependencies:** 4.3-0. **Scope:** Medium. **Likely files:** `worker/src/api/receipts.ts`, `worker/src/db/review.ts`, `worker/src/contracts/review-draft.ts`, `worker/test/review-read.test.ts`, `worker/test/review-draft.test.ts`. **Commit:** `feat: expose safe receipt review drafts`.
+
+### 4.3-2 — Create one entry atomically
+
+**Description:** Implement the missing-entry POST path and prove the conditional insert/completion behavior before connecting UI.
+
+**Acceptance criteria:**
+- [ ] Valid save creates one `ai_edited` entry with null confidence and review timestamps, completes the receipt, preserves evidence and returns 201 with ledger detail.
+- [ ] Eligibility/category checks hold at commit time; duplicate saves return the owned winning entry ID, completed/no-entry receipts cannot be recreated, and injected failure rolls back both writes.
+- [ ] Authentication/Origin, strict 32 KiB streamed-body validation, category isolation and safe error responses match existing writes; no external calls occur.
+
+**Verification:** `pnpm --filter worker test -- test/review-save.test.ts test/ledger-write.test.ts test/pipeline.test.ts test/drive-no-delete.test.ts`; worker typecheck. Include concurrent requests, state/category races, replay after a committed-but-lost response and terminal receipt redelivery.
+
+**Dependencies:** 4.3-1. **Scope:** Medium. **Likely files:** `worker/src/db/review-write.ts`, `worker/src/api/receipt-review.ts`, `worker/src/api/receipts.ts`, `worker/test/review-save.test.ts`, existing pipeline test. Reuse detail formatting or extract it in a separate prerequisite if needed; do not add a sixth substantive file silently. **Commit:** `feat: save missing-entry reviews atomically`.
+
+### Checkpoint 4.3-A — Review API is safe
+
+- [ ] Detail/create focused tests and affected typechecks pass; two-user isolation, exact amounts, rollback and single-entry creation are demonstrated.
+- [ ] Inspect the write predicates and failure paths before UI work; record any contract adjustment in the spec.
+
+### 4.3-3 — Paginate pending receipts
+
+**Description:** Extend existing listing compatibly, without loading extraction blobs, and expose the complete pending backlog.
+
+**Acceptance criteria:**
+- [ ] More than 50 pending receipts, including missing-date receipts and equal upload timestamps, are reachable once in a stable dataset; cursor anchors need not remain pending.
+- [ ] Limits/cursors are bounded and validated, status mismatch is rejected, and status-filter/default-list behavior remains compatible with polling.
+- [ ] Lists are user-scoped, use deterministic upload-time/ID ordering, and omit raw extraction/line items.
+
+**Verification:** `pnpm --filter worker test -- test/review-read.test.ts test/receipts.test.ts`; worker/web typechecks. Cover defaults/caps, malformed cursors, ties, last/empty pages, removal between pages and foreign accounts.
+
+**Dependencies:** 4.3-1; execute after 4.3-2 to resolve the higher-risk write first. **Scope:** Medium. **Likely files:** `worker/src/api/receipts.ts`, `worker/src/db/review.ts`, `worker/src/contracts/review.ts`, `worker/test/review-read.test.ts`. **Commit:** `feat: paginate the receipt review backlog`.
+
+### 4.3-4 — Serialize partial review forms
+
+**Description:** Reuse the current form fields and exact decimal handling for blank/partial drafts and complete creation bodies.
+
+**Acceptance criteria:**
+- [ ] Missing required values remain blank; valid optional nulls and signed item amounts survive initialization and save.
+- [ ] Shared field validation supports complete creation and existing minimal PATCH without fabricated IDs/versions or changed PATCH semantics.
+- [ ] Currency selection/change preserves decimal strings and requires monetary confirmation; invalid/over-precision amounts block submission.
+
+**Verification:** `pnpm --filter worker test -- test/ledger-form.test.ts test/review-form.test.ts`; worker/web typechecks and SPA build.
+
+**Dependencies:** 4.3-0, 4.3-1. **Scope:** Medium. **Likely files:** `web/src/ledger/form.ts`, `worker/test/ledger-form.test.ts`, `worker/test/review-form.test.ts`. **Commit:** `feat: prepare partial receipt review forms`.
+
+### 4.3-5 — Support missing-entry editor mode
+
+**Description:** Add typed API calls and an explicit receipt-draft mode to the existing editor, retaining its preview and recovery experience.
+
+**Acceptance criteria:**
+- [ ] Existing-entry mode still PATCHes with a version; draft mode POSTs complete fields and uses the real receipt ID for preview.
+- [ ] Duplicate/uncertain saves retain input and reload receipt state before retry. Winning entries are fetched for explicit comparison; no automatic resubmit/overwrite or recreation of terminal receipts.
+- [ ] Mobile panes, dirty-close protection, session expiry, missing Drive originals and keyboard focus continue to work in both modes.
+
+**Verification:** Form regressions, worker/web typechecks and SPA build. Verify the draft mode with synthetic browser fixtures when wired in 4.3-7; until then no new UI action is exposed. Extract pure recovery logic with focused tests if branching becomes substantial.
+
+**Dependencies:** 4.3-2, 4.3-4. **Scope:** Medium. **Likely files:** `web/src/api.ts`, `web/src/ledger/EntryEditor.tsx`, `web/src/ledger/LedgerView.tsx`; a focused recovery helper/test pair only if needed. **Commit:** `feat: review receipts through the shared editor`.
+
+### 4.3-6 — Synchronize pending review state
+
+**Description:** Extend the existing cache helper and receipt-completion invalidation before exposing the inbox.
+
+**Acceptance criteria:**
+- [ ] Cancel pending review/detail reads before publishing confirmed state; remove saved items and refresh all ledger scopes, detail queries and Recent receipts.
+- [ ] Upload/poll completion invalidates review data without changing polling cadence/cap; an account switch prevents late saves/reads from repopulating another account's cache.
+- [ ] Existing-entry saves and new-entry saves use the same confirmed-state synchronization; original warnings cannot revive pending status.
+
+**Verification:** `pnpm --filter worker test -- test/review-cache.test.ts`; worker/web typechecks and SPA build. Test stale in-flight responses, separate page caches, account changes and existing recent-receipt updates.
+
+**Dependencies:** 4.3-3, 4.3-5. **Scope:** Medium. **Likely files:** `web/src/ledger/review-cache.ts`, `web/src/App.tsx`, `worker/test/review-cache.test.ts`. **Commit:** `fix: synchronize receipt review caches after saves`.
+
+### 4.3-7 — Expose the complete review inbox
+
+**Description:** Mount the paginated inbox above the ledger and connect receipt selection to both editor modes.
+
+**Acceptance criteria:**
+- [ ] Pending receipts are reachable independently of ledger filters, including an invalid-output receipt beyond page one; each appears once per page.
+- [ ] Selection fetches detail on demand and handles current state before opening the appropriate editor. Both save paths remove the item, reset pagination and refresh totals without a reload.
+- [ ] Loading/empty/error states, retry, Previous/Next/Refresh, empty-page recovery, light/dark themes and focus restoration work on phone and desktop.
+
+**Verification:** Worker/web typechecks, SPA build and real Chrome checks with synthetic receipts: both review paths, >50 rows, missing date, changed ledger filters, concurrent save, lost response, missing preview and account switch. Re-run affected cache/form tests only if changed.
+
+**Dependencies:** 4.3-3 through 4.3-6. **Scope:** Medium. **Likely files:** `web/src/ledger/ReviewInbox.tsx`, `web/src/App.tsx`, `web/src/api.ts`, `web/src/ledger/EntryEditor.tsx` (focus fallback only if needed). **Commit:** `feat: expose the complete receipt review inbox`.
+
+### Checkpoint 4.3-B — Both review paths work end to end
+
+- [ ] Old/missing-date receipt can be found and saved exactly once; it leaves pending review and contributes to the correct month/category/currency totals.
+- [ ] Existing-entry review, recoverable failures and account isolation pass browser checks; form state survives preview/save failures.
+
+### 4.3-8 — Verify and record M4.3
+
+**Description:** Run final checks on the completed code and record evidence without claiming unperformed staging work.
+
+**Acceptance criteria:**
+- [ ] Full tests, worker/web/infrastructure typechecks, SPA build and Worker bundle pass; relevant browser evidence covers both review modes, security boundaries and recovery.
+- [ ] Mark Tasks 6/9 complete only from demonstrated results; document endpoint CPU checks for staging, unchanged infrastructure/schema and any remaining limitations.
+- [ ] Review the diff for scope, logging, Drive immutability and regressions; update M4.3 status/evidence while preserving open M4.4/M4.5 and prior staging tasks.
+
+**Verification:** `pnpm -r test`; `pnpm --filter worker typecheck`; `pnpm --filter web typecheck`; `pnpm --filter "./infrastructure/*" typecheck`; `pnpm --filter web build`; `pnpm --filter worker bundle`; Chrome evidence from 4.3-7. Reuse successful final-state checks rather than repeating unchanged runs. Receipt eval only if `src/agent/` changed. Deployment stays CI-only; no merge/deploy is part of this planning request.
+
+**Dependencies:** 4.3-0 through 4.3-7. **Scope:** Medium documentation/verification. **Likely files:** `AGENTS.md`, technical spec, `documents/M4.3 verification.md`, `tasks/plan.md`, `tasks/todo.md`. **Commit:** `docs: record M4.3 review inbox verification`.
+
 ## Task 10 — Add a custom category
 
 **Description:** Let the user create a category and immediately select it in the editor.
