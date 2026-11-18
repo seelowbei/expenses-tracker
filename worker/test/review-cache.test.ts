@@ -58,6 +58,16 @@ describe("confirmed review cache update", () => {
     expect(client.getQueryData(["receipt-detail", account, "r"])).toMatchObject({ entryId: "e", draft: null, receipt: { status: "done" } });
     client.clear();
   });
+  it("does not publish a late save after switching accounts", async () => {
+    const client = createAppQueryClient();
+    client.setQueryData(["me"], { email: account });
+    const saving = syncReviewedEntry(client, account, entry);
+    client.setQueryData(["me"], { email: "bob@example.com" });
+    expect(await saving).toBe(false);
+    expect(client.getQueryData(["ledger-detail", account, "e"])).toBeUndefined();
+    expect(client.getQueryData(["ledger-detail", "bob@example.com", "e"])).toBeUndefined();
+    client.clear();
+  });
   it("does not recreate private data after sign-out", async () => {
     const client = createAppQueryClient();
     client.setQueryData(["me"], { email: account });
