@@ -14,7 +14,7 @@ Design and decisions: [plan.md](plan.md). The user confirmed explicit review tra
 
 Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verification and documentation run throughout; each PR must pass its own relevant checks before merge. Numbered tasks are identifiers; follow the delivery order above. Checkpoints below apply when their associated work is complete, even where task numbering differs from merge order.
 
-M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20verification.md). M4.2 completes the existing-entry part of Task 1, Tasks 2, 7–8 and Checkpoint C locally. Evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). M4.3–M4.5 contracts remain to be resolved with their implementations.
+M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20verification.md). M4.2 completes the existing-entry part of Task 1, Tasks 2, 7–8 and Checkpoint C locally. Evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). M4.3–M4.5 contracts remain to be resolved with their implementations. The November 18 M4.2 follow-up adds side-by-side image/PDF review, mobile pane switching and immediate Recent receipts status synchronization; local evidence is in the same verification document.
 
 ## Task 1 — Confirm decisions and define write contracts
 
