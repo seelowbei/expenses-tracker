@@ -1,5 +1,6 @@
 import type { CategoryDto } from "../../../worker/src/contracts/categories";
-import { supportedCurrencies } from "../../../worker/src/contracts/ledger-write";
+import { CurrencySelect } from "./CurrencySelect";
+import { SelectControl } from "./SelectControl";
 import type { EntryForm, FormErrors } from "./form";
 
 export const editorControl = "min-h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900";
@@ -21,22 +22,17 @@ export function EntryFields({ form, setForm, errors, categories }: {
     <div className="grid min-w-0 gap-4 sm:grid-cols-2">{input("txn_date", "Date", "date")}{input("txn_time", "Time (optional)", "time")}</div>
     <div className="grid gap-4 sm:grid-cols-2">
       <label className="block min-w-0 space-y-1 text-sm">Category
-        <select {...a11y("category_id")} className={editorControl} value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
+        <SelectControl {...a11y("category_id")} className={editorControl} value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>{error("category_id")}
+        </SelectControl>{error("category_id")}
       </label>
-      <label className="block min-w-0 space-y-1 text-sm">Currency
-        <select {...a11y("currency")} className={editorControl} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
-          {!supportedCurrencies.includes(form.currency) && <option value={form.currency}>{form.currency} — choose a currency</option>}
-          {supportedCurrencies.map((code) => <option key={code}>{code}</option>)}
-        </select>{error("currency")}
-      </label>
+      <CurrencySelect value={form.currency} onChange={(currency) => setForm({ ...form, currency })} className={editorControl} error={errors.currency} />
     </div>
     <div className="grid gap-4 sm:grid-cols-2">{input("total", `Total (${form.currency})`)}{input("tax", `Tax (${form.currency}, optional)`)}</div>
     <label className="block space-y-1 text-sm">Payment method (optional)
-      <select {...a11y("payment_method")} className={editorControl} value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
+      <SelectControl {...a11y("payment_method")} className={editorControl} value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
         <option value="">Not recorded</option>{["cash", "card", "ewallet", "bank_transfer", "other"].map((method) => <option key={method} value={method}>{method.replaceAll("_", " ")}</option>)}
-      </select>{error("payment_method")}
+      </SelectControl>{error("payment_method")}
     </label>
     <fieldset className="space-y-2">
       <legend className="mb-2 text-sm font-medium">Line items (optional, {form.currency})</legend>
