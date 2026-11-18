@@ -77,3 +77,13 @@ export const patchLedgerEntry = (id: string, patch: LedgerPatch, signal?: AbortS
   call<{ entry: LedgerDetail }>(`/api/ledger/${encodeURIComponent(id)}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch), signal,
   }).then((r) => r.entry);
+
+export async function getReceiptFile(id: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await fetch(`/api/receipts/${encodeURIComponent(id)}/file`, { credentials: "same-origin", cache: "no-store", signal });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    throw new ApiError(res.status, typeof body.error === "string" ? body.error : `http_${res.status}`);
+  }
+  if (!["image/jpeg", "image/png", "application/pdf"].includes(res.headers.get("Content-Type") ?? "")) throw new ApiError(415, "unsupported_type");
+  return res.blob();
+}
