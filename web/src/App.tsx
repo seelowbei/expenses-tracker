@@ -111,6 +111,8 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
     if (completed !== undefined) {
       void qc.invalidateQueries({ queryKey: ["ledger", me.email] });
       void qc.invalidateQueries({ queryKey: ["ledger-detail", me.email] });
+      void qc.invalidateQueries({ queryKey: ["review", me.email] });
+      void qc.invalidateQueries({ queryKey: ["receipt-detail", me.email] });
     }
   }, [completed, qc, me.email]);
 
