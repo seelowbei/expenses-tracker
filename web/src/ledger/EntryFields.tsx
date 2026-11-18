@@ -23,6 +23,7 @@ export function EntryFields({ form, setForm, errors, categories }: {
     <div className="grid gap-4 sm:grid-cols-2">
       <label className="block min-w-0 space-y-1 text-sm">Category
         <SelectControl {...a11y("category_id")} className={editorControl} value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
+          <option value="" disabled>Choose a category</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </SelectControl>{error("category_id")}
       </label>

@@ -1,33 +1,41 @@
+import type { ReviewDetail, ReviewDraft } from "../../../worker/src/contracts/review";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { LedgerDetail } from "../../../worker/src/contracts/ledger";
-import { ApiError, getLedgerEntry, listCategories, patchLedgerEntry } from "../api";
+import { ApiError, getLedgerEntry, getReceiptDetail, createReceiptReview, listCategories, patchLedgerEntry } from "../api";
 import { clearSession } from "../query-client";
 import { EntryFields, editorButton } from "./EntryFields";
-import { entryForm, formPatch, type FormErrors } from "./form";
+import { entryForm, formPatch, formCreate, type FormErrors } from "./form";
 import { syncReviewedEntry } from "./review-cache";
 import { ReceiptPreview } from "./ReceiptPreview";
 import { formatMoney } from "./format";
 
-export function EntryEditor({ entry, account, onClose, onSaved }: {
-  entry: LedgerDetail; account: string; onClose: () => void; onSaved: () => void;
-}) {
+type EditorProps = { account: string; onClose: () => void; onSaved: () => void } & (
+  { entry: LedgerDetail; review?: never } | { entry?: never; review: ReviewDetail & { draft: ReviewDraft } }
+);
+export function EntryEditor({ entry, review, account, onClose, onSaved }: EditorProps) {
   const qc = useQueryClient();
   const dialog = useRef<HTMLDialogElement>(null);
   const detailsPane = useRef<HTMLDivElement>(null);
   const [pane, setPane] = useState<"receipt" | "details">("details");
   const active = useRef(true);
   const request = useRef<AbortController | null>(null);
-  const [base, setBase] = useState(entry);
-  const [form, setForm] = useState(() => entryForm(entry));
+  const [base, setBase] = useState<LedgerDetail | null>(entry ?? null);
+  const [form, setForm] = useState(() => entryForm(entry ?? review?.draft ?? {}));
   const [errors, setErrors] = useState<FormErrors>({});
   const [busy, setBusy] = useState(false);
   const [currencyConfirmed, setCurrencyConfirmed] = useState(false);
   const [message, setMessage] = useState("");
   const [mustReload, setMustReload] = useState(false);
   const [latest, setLatest] = useState<LedgerDetail | null>(null);
+  const [canRetryCreate, setCanRetryCreate] = useState(false);
+  const initial = base ?? review?.draft ?? {};
+  const receiptId = base?.receipt_id ?? review?.receipt.id ?? null;
+  const driveLink = base?.drive_link ?? review?.receipt.driveLink ?? null;
+  const reasons = base?.review_reasons ?? review?.receipt.reviewReasons;
+  const pending = (base?.receipt_status ?? review?.receipt.status) === "needs_review";
   const categories = useQuery({ queryKey: ["categories", account], queryFn: ({ signal }) => listCategories(signal) });
-  const dirty = JSON.stringify(form) !== JSON.stringify(entryForm(base));
+  const dirty = JSON.stringify(form) !== JSON.stringify(entryForm(initial));
   useEffect(() => {
     active.current = true;
     const opener = document.activeElement;
@@ -35,7 +43,7 @@ export function EntryEditor({ entry, account, onClose, onSaved }: {
     return () => {
       active.current = false; request.current?.abort();
       if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
-      else document.getElementById("ledger-heading")?.focus();
+      else document.getElementById(review ? "review-heading" : "ledger-heading")?.focus();
     };
   }, []);
   useEffect(() => {
@@ -49,29 +57,44 @@ export function EntryEditor({ entry, account, onClose, onSaved }: {
   }, [message]);
   const close = () => { if (!busy && (!dirty || window.confirm("Discard your unsaved changes?"))) onClose(); };
   const reload = async () => {
-    setBusy(true);
+    setBusy(true); setLatest(null); setCanRetryCreate(false);
     request.current = new AbortController();
     try {
-      const fresh = await getLedgerEntry(entry.id, request.current.signal);
-      if (active.current) {
+      let fresh: LedgerDetail | null = null;
+      if (base) fresh = await getLedgerEntry(base.id, request.current.signal);
+      else if (review) {
+        const detail = await getReceiptDetail(review.receipt.id, request.current.signal);
+        if (detail.entryId) fresh = await getLedgerEntry(detail.entryId, request.current.signal);
+        else if (active.current) {
+          setCanRetryCreate(detail.draft !== null);
+          setMessage(detail.draft !== null ? "No entry was saved. Your draft is retained; you can retry after checking it."
+            : "This receipt is no longer awaiting review. Your draft is retained, but a new entry cannot be created.");
+        }
+      }
+      if (active.current && fresh) {
         setLatest(fresh);
-        qc.setQueryData(["ledger-detail", account, entry.id], fresh);
-        for (const key of ["ledger", "receipts"]) void qc.invalidateQueries({ queryKey: [key, account] });
+        qc.setQueryData(["ledger-detail", account, fresh.id], fresh);
+        for (const key of ["ledger", "receipts", "review", "receipt-detail"]) void qc.invalidateQueries({ queryKey: [key, account] });
       }
     } catch (e) {
       if (!active.current) return;
       if (e instanceof ApiError && e.status === 401) clearSession(qc);
-      else setMessage("Couldn't reload this entry. Your draft is retained. Try loading it again.");
+      else setMessage("Couldn't reload the saved state. Your draft is retained. Try loading it again.");
     } finally { if (active.current) setBusy(false); }
   };
   const save = async () => {
     setPane("details");
-    const result = formPatch(form, base, currencyConfirmed);
+    const result = base ? formPatch(form, base, currencyConfirmed) : formCreate(form, initial.currency ?? "", currencyConfirmed);
     if (result.errors) { setErrors(result.errors); setMessage("Check the highlighted fields."); return; }
     setErrors({}); setMessage(""); setBusy(true);
     request.current = new AbortController();
     try {
-      const saved = await patchLedgerEntry(entry.id, result.patch, request.current.signal);
+      const saved = "patch" in result && result.patch && base
+        ? await patchLedgerEntry(base.id, result.patch, request.current.signal)
+        : "body" in result && result.body && review
+          ? await createReceiptReview(review.receipt.id, result.body, request.current.signal)
+          : null;
+      if (!saved) return;
       if (!active.current) return;
       if (await syncReviewedEntry(qc, account, saved) && active.current) onSaved();
     } catch (e) {
@@ -91,7 +114,7 @@ export function EntryEditor({ entry, account, onClose, onSaved }: {
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
         <div className="min-w-0">
           <h2 id="editor-title" className="text-lg font-semibold">Review expense</h2>
-          <p className="truncate text-sm text-slate-500 dark:text-slate-400">{entry.merchant} · {entry.txn_date}</p>
+          <p className="truncate text-sm text-slate-500 dark:text-slate-400">{initial.merchant || "Receipt review"} · {initial.txn_date || "Date needed"}</p>
         </div>
         <button type="button" className={editorButton} disabled={busy} onClick={close}>Close</button>
       </header>
@@ -101,16 +124,16 @@ export function EntryEditor({ entry, account, onClose, onSaved }: {
       </nav>
       <div className="min-h-0 flex-1 lg:grid lg:grid-cols-2">
         <div className={`${pane === "receipt" ? "block" : "hidden"} h-full min-h-0 min-w-0 border-slate-200 lg:block lg:border-r dark:border-slate-700`}>
-          <ReceiptPreview receiptId={entry.receipt_id} driveLink={entry.drive_link} />
+          <ReceiptPreview receiptId={receiptId} driveLink={driveLink} />
         </div>
         <div ref={detailsPane} className={`${pane === "details" ? "block" : "hidden"} h-full min-h-0 min-w-0 space-y-5 overflow-y-auto p-4 sm:p-6 lg:block`}>
           <div>
             <h3 className="font-semibold">Expense details</h3>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Check these values against the receipt. You can confirm them without making changes.</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{base ? "Check these values against the receipt. You can confirm them without making changes." : "Some fields could not be read. Complete the required details to add this expense to your ledger."}</p>
           </div>
-          {!!entry.review_reasons?.length && <details open={entry.receipt_status === "needs_review"} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            <summary className="cursor-pointer py-1 font-medium">{entry.receipt_status === "needs_review" ? "What to check" : "Original extraction warnings"}</summary>
-            <p className="pb-1 pt-2">{entry.review_reasons.map((r) => r.replaceAll("_", " ")).join(", ")}. Retained as history after review.</p>
+          {!!reasons?.length && <details open={pending} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <summary className="cursor-pointer py-1 font-medium">{pending ? "What to check" : "Original extraction warnings"}</summary>
+            <p className="pb-1 pt-2">{reasons.map((r) => r.replaceAll("_", " ")).join(", ")}. Retained as history after review.</p>
           </details>}
           {message && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{message}</p>}
           {mustReload && <div className="space-y-3 rounded-md border border-amber-400 p-3 text-sm">
@@ -126,7 +149,10 @@ export function EntryEditor({ entry, account, onClose, onSaved }: {
                 }}>Use latest saved values</button>
               </div>
             </> : <p>Reload the saved entry before retrying. Your draft will stay here.</p>}
-            <button type="button" className={editorButton} disabled={busy} onClick={() => void reload()}>{busy ? "Loading…" : "Load latest entry"}</button>
+            {canRetryCreate && <button type="button" className={editorButton} disabled={busy} onClick={() => {
+              setMustReload(false); setCanRetryCreate(false); setMessage("Check your retained draft, then save again.");
+            }}>Check draft and retry</button>}
+            <button type="button" className={editorButton} disabled={busy} onClick={() => void reload()}>{busy ? "Loading…" : "Load latest saved state"}</button>
           </div>}
           {categories.isError && <p role="alert" className="text-sm">Couldn't load categories. <button type="button" className="underline" onClick={() => void categories.refetch()}>Retry categories</button></p>}
           <fieldset disabled={busy || categories.isPending || categories.isError} className="space-y-4">
@@ -135,7 +161,7 @@ export function EntryEditor({ entry, account, onClose, onSaved }: {
               if (next.currency !== form.currency) setCurrencyConfirmed(false);
               setForm(next);
             }} />
-            {form.currency !== base.currency && <label className="flex items-start gap-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            {form.currency !== (initial.currency ?? "") && <label className="flex items-start gap-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               <input type="checkbox" className="mt-1 size-5 shrink-0" checked={currencyConfirmed} onChange={(e) => setCurrencyConfirmed(e.target.checked)} />
               I checked the total, tax and every line-item amount in {form.currency}. No currency conversion is applied.
             </label>}

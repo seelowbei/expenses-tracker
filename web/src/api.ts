@@ -1,3 +1,4 @@
+import type { ReviewCreate, ReviewDetail, ReceiptPage } from "../../worker/src/contracts/review";
 // Typed calls to the Worker API. Same origin, so the session cookie and Origin header come for free.
 import { ApiError } from "./api-error";
 export { ApiError } from "./api-error";
@@ -87,3 +88,15 @@ export async function getReceiptFile(id: string, signal?: AbortSignal): Promise<
   if (!["image/jpeg", "image/png", "application/pdf"].includes(res.headers.get("Content-Type") ?? "")) throw new ApiError(415, "unsupported_type");
   return res.blob();
 }
+
+export const getReceiptDetail = (id: string, signal?: AbortSignal) =>
+  call<ReviewDetail>(`/api/receipts/${encodeURIComponent(id)}`, { signal });
+export const createReceiptReview = (id: string, body: ReviewCreate, signal?: AbortSignal) =>
+  call<{ entry: LedgerDetail }>(`/api/receipts/${encodeURIComponent(id)}/review`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal,
+  }).then((result) => result.entry);
+export const listReviewReceipts = (cursor?: string, signal?: AbortSignal) => {
+  const query = new URLSearchParams({ status: "needs_review" });
+  if (cursor) query.set("cursor", cursor);
+  return call<ReceiptPage>(`/api/receipts?${query}`, { signal });
+};

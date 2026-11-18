@@ -32,7 +32,7 @@ export function CurrencySelect({ value, onChange, className, error }: {
         aria-controls={open ? listId : undefined} aria-activedescendant={open && active >= 0 && matches[active] ? `${listId}-${matches[active].code}` : undefined}
         aria-invalid={!!error} aria-describedby={error ? "error-currency" : undefined}
         autoComplete="off" spellCheck={false} placeholder="Search code or currency name" className={`${className} pr-10`}
-        value={open ? search : selected ? `${selected.code} — ${selected.name}` : `${value} — choose a currency`}
+        value={open ? search : selected ? `${selected.code} — ${selected.name}` : value ? `${value} — choose a currency` : ""}
         onFocus={show} onClick={() => { if (!open) show(); }} onBlur={() => setOpen(false)}
         onChange={(e) => { setSearch(e.target.value); setActive(-1); setOpen(true); }}
         onKeyDown={(e) => {
