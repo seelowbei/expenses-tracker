@@ -11,6 +11,7 @@ import { DriveError } from "../drive/client";
 import { sha256Hex } from "../lib/encoding";
 import { log } from "../lib/log";
 import { sniffMime, type AllowedMime } from "../lib/sniff";
+import { receiptFileRoutes } from "./receipt-file";
 import { enqueueOrPark } from "../pipeline/enqueue";
 
 /** Direct multipart limit. Larger files need the resumable flow (deferred to M5). */
@@ -48,6 +49,7 @@ const StatusQuery = z
   .pipe(z.array(z.enum(RECEIPT_STATUSES)));
 
 export const receiptRoutes = new Hono<AppEnv>();
+receiptRoutes.route("/", receiptFileRoutes);
 
 receiptRoutes.get("/", async (c) => {
   const status = StatusQuery.safeParse(c.req.query("status"));

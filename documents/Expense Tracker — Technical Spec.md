@@ -325,6 +325,10 @@ A conditional D1 batch updates the entry and resolves its pending receipt atomic
 
 The editor retains unsaved values after failures and conflicts, reloads the latest server state for comparison, and requires an explicit decision before retrying against a new version. A lost response must not cause a blind resubmit. Successful saves refresh all ledger filters/totals and receipt queries. Closing a dirty editor asks before discarding changes; signing out or changing accounts clears it. The complete review inbox and missing-entry creation remain M4.3.
 
+**Review workspace (November 17 user feedback):** desktop review shows the original receipt beside the editor, with independent scrolling and a fixed save/cancel footer. Small screens switch between receipt and details while retaining the form. A successful PATCH updates the matching recent receipt from the server-confirmed status immediately, cancels pre-save reads, and then refreshes queries; retained original warnings never imply current pending status.
+
+`GET /api/receipts/:id/file` is an authenticated, ownership-scoped read of the original Drive file for this workspace. The Worker streams Drive `files.get?alt=media` without buffering, parsing PDFs, or transforming images. Only stored JPEG/PNG/PDF MIME types are served, with private/no-store and nosniff headers. The browser holds a temporary object URL for display and revokes it on close/account change. Missing files return 404 `receipt_file_missing`; inaccessible receipts return 404 `not_found`; transient Drive failures return 503 `drive_unavailable`; revoked access uses the existing disconnect/session-expiry flow. Preview failure never blocks editing ledger data. This adds no storage, scope, or Drive write operations, and ordinary lists still do not call Drive.
+
 ### M4.1 read API contract (November 16, 2026)
 
 `GET /api/categories` returns `{ categories: [{ id, slug, name }] }`, containing system defaults and the session user's custom categories, ordered by display name then ID. Existing slug collisions remain visible; extraction keeps its existing user-category precedence.

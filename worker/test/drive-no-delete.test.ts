@@ -22,11 +22,12 @@ describe("Drive is write-once", () => {
       [downloadUrl("file")]: () => new Response(new Uint8Array([1, 2, 3])),
     });
     const drive = driveApi("at", google.fetch);
-    expect(Object.keys(drive).sort()).toEqual(["createFolder", "downloadFile", "uploadMultipart"]);
+    expect(Object.keys(drive).sort()).toEqual(["createFolder", "downloadFile", "openFile", "uploadMultipart"]);
 
     await drive.createFolder();
     await drive.uploadMultipart({ name: "r.jpg", mimeType: "image/jpeg", parentId: "folder", body: new Blob(["x"]) });
     await drive.downloadFile("file");
+    await (await drive.openFile("file")).body?.cancel();
     for (const call of google.calls) {
       // POST to the collection = create; GET = read. Any other method on /files/<id> would be an update or delete.
       expect(call.key).toMatch(

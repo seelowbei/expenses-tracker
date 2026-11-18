@@ -36,10 +36,13 @@ export interface DriveApi {
   uploadMultipart(file: { name: string; mimeType: string; parentId: string; body: Blob }): Promise<{ id: string; webViewLink: string }>;
   /** Read-only `files.get?alt=media`. 404 when the user deleted the file (or it isn't ours). */
   downloadFile(fileId: string): Promise<Uint8Array>;
+  /** Original response body for streaming previews; caller owns consuming/cancelling it. */
+  openFile(fileId: string): Promise<Response>;
 }
 
 export function driveApi(accessToken: string, fetcher: Fetcher): DriveApi {
   const auth = { Authorization: `Bearer ${accessToken}` };
+  const openFile = (fileId: string) => fetcher(`${FILES_URL}/${encodeURIComponent(fileId)}?alt=media`, { method: "GET", headers: auth }).then(ensureOk);
   return {
     async createFolder(name = FOLDER_NAME) {
       const res = await ensureOk(
@@ -73,10 +76,9 @@ export function driveApi(accessToken: string, fetcher: Fetcher): DriveApi {
       return (await res.json()) as { id: string; webViewLink: string };
     },
 
+    openFile,
     async downloadFile(fileId) {
-      const res = await ensureOk(
-        await fetcher(`${FILES_URL}/${encodeURIComponent(fileId)}?alt=media`, { method: "GET", headers: auth }),
-      );
+      const res = await openFile(fileId);
       return new Uint8Array(await res.arrayBuffer());
     },
   };

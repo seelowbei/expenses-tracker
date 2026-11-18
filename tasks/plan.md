@@ -93,7 +93,7 @@ On a save/delete error retain the form, show a recoverable message and refetch o
 
 ## UI structure and refresh
 
-Keep the existing upload and status experience. Add a ledger section with month/category controls, currency-labelled totals and grouped entries, with the pending review section above it. Use a focused edit/review panel that works as a full-width form on phones and a bounded panel on desktop. Open the original using the existing Drive link; no Worker image/PDF preview or additional Drive request is needed for editing.
+Keep the existing upload and status experience. Add a ledger section with month/category controls, currency-labelled totals and grouped entries, with the pending review section above it. Use a focused edit/review panel that works as a full-width form on phones and a bounded panel on desktop. November 17 user feedback adds a side-by-side original preview: an authenticated read-only route streams the Drive file to a browser image/PDF viewer. The Worker never buffers, parses or transforms it. Keep the existing Drive link as a fallback; preview failures must not block editing.
 
 Extract new UI components from `App.tsx` as the slices require; avoid an unrelated application rewrite or router dependency. Use labelled form controls, visible keyboard focus, focus restoration when closing the editor, clear field errors and a dirty-form close confirmation. Include loading, empty, retryable error and stale-conflict states in light and dark themes.
 
