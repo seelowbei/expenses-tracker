@@ -1,8 +1,9 @@
+import type { LedgerDetail } from "../../../worker/src/contracts/ledger";
 import { useQuery } from "@tanstack/react-query";
 import { getLedgerEntry } from "../api";
 import { formatMoney } from "./format";
 
-export function EntryDetail({ id, account }: { id: string; account: string }) {
+export function EntryDetail({ id, account, onEdit }: { id: string; account: string; onEdit: (entry: LedgerDetail) => void }) {
   const detail = useQuery({ queryKey: ["ledger-detail", account, id], queryFn: ({ signal }) => getLedgerEntry(id, signal) });
   if (detail.isPending) return <p role="status" className="p-4 text-sm">Loading details…</p>;
   if (detail.isError) return (
@@ -13,6 +14,8 @@ export function EntryDetail({ id, account }: { id: string; account: string }) {
   const e = detail.data;
   return (
     <div className="space-y-3 border-t border-slate-200 px-4 py-3 text-sm dark:border-slate-700">
+      <button className="min-h-11 rounded-md bg-teal-700 px-4 py-2 font-medium text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700" onClick={() => onEdit(e)}>Edit / confirm entry</button>
+      {e.reviewed_at && <p className="text-slate-600 dark:text-slate-400">Reviewed · {e.reviewed_at.slice(0, 10)}</p>}
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">
         <dt>Date &amp; time</dt><dd className="text-right tabular-nums">{e.txn_date}{e.txn_time ? ` · ${e.txn_time}` : ""}</dd>
         <dt>Tax</dt><dd className="text-right tabular-nums">{e.tax_minor === null ? "Not recorded" : formatMoney(e.tax_minor, e.currency)}</dd>

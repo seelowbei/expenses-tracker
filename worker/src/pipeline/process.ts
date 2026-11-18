@@ -172,6 +172,7 @@ export async function processReceipt(deps: PipelineDeps, body: unknown, delivery
         notes: sql`null`.as("notes"),
         createdAt: sql`${stamp}`.as("created_at"),
         updatedAt: sql`${stamp}`.as("updated_at"),
+        reviewedAt: sql`null`.as("reviewed_at"),
       }).from(receipts).where(scope))
       .onConflictDoNothing({ target: ledgerEntries.receiptId }); // redelivery never makes a second entry
     await finish(

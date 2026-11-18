@@ -127,7 +127,8 @@ CREATE TABLE ledger_entries (
   source        TEXT NOT NULL,               -- ai | manual | ai_edited
   notes         TEXT,
   created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
+  updated_at    TEXT NOT NULL,
+  reviewed_at   TEXT                         -- explicit human confirmation; NULL until reviewed
 );
 CREATE INDEX idx_ledger_user_cat_date ON ledger_entries(user_id, category_id, txn_date);
 CREATE INDEX idx_ledger_user_date ON ledger_entries(user_id, txn_date, txn_time);
@@ -283,7 +284,7 @@ The plan was a 50-receipt test set (local receipts, mixed images and PDFs, a few
 **Decision (Nov 10, 2026): provisional go on 10 receipts.** Only 10 local receipts were available. The eval passed (date 90%, total 90%, about 43 neurons per receipt; details in `documents/M1 eval results.md`), but at that size the result is weak evidence. So:
 
 - The 10 labelled receipts are kept as a regression set; re-run the eval after every prompt, schema or normalisation change.
-- Real accuracy comes from the users' own corrections once M3/M4 exist. `receipts.raw_extraction` keeps the parsed extraction, and `ledger_entries` holds the final values, so a per-field comparison (merchant, date, time, total, tax, currency, category) for entries with `source` `ai` or `ai_edited` gives the edit rate per field. Count only entries the user has seen: a wrong value in an unreviewed `done` entry is not yet a correction.
+- Real accuracy comes from the users' own corrections once M3/M4 exist. `receipts.raw_extraction` keeps the parsed extraction, and `ledger_entries` holds the final values, so a per-field comparison (merchant, date, time, total, tax, currency, category) for entries with `source` `ai` or `ai_edited` gives the edit rate per field. Count only entries with non-null `reviewed_at`: a wrong value in an unreviewed `done` entry is not yet a correction.
 - The AI Gateway fallback is decided from that edit rate, not from the 10-receipt eval.
 
 First M1 measurement (one digital Kopitiam receipt, after the prompt fixes): 1 call, 6,831 input + 106 output tokens, ~37 neurons, 4.2 s, all fields correct. The image accounts for almost all input tokens.
@@ -312,6 +313,22 @@ The UI polls `GET /api/receipts?status=queued,processing` every 3 s while anythi
 
 Ledger entries carry `txn_time` (`"HH:MM"` or `null`). `GET /api/ledger` orders entries by `txn_date` then `txn_time` (entries without a time last within their day), and `PATCH /api/ledger/:id` accepts `txn_time` (`"HH:MM"` or `null`) like any other field. AI usage has no API in v1; it is stored for later reporting and queried with `wrangler d1 execute` until then.
 
+### M4.2 existing-entry edits (November 17, 2026)
+
+`PATCH /api/ledger/:id` accepts a strict JSON object (maximum 32 KiB), with required `expected_updated_at` matching the loaded entry. Editable fields are `merchant`, `txn_date`, `txn_time`, `currency`, `total_minor`, `tax_minor`, `category_id`, `payment_method`, `line_items` and `notes`. Omitted fields are preserved. An empty edit is invalid unless `confirm_review: true` explicitly confirms the entry unchanged. Success returns `{ entry }` using the detail DTO, now including nullable `reviewed_at`.
+
+Human values use real calendar dates and local `HH:MM` times, supported ISO currencies (excluding `XXX`), safe integer minor units, nonnegative total/tax and signed line-item amounts. Optional values may be null. Merchant is trimmed and 1–120 characters; category IDs are 1–120 characters; line items are at most 50 with trimmed 1–200 character descriptions; notes are at most 2,000 trimmed characters. Payment methods match the extraction enum. Human confirmation does not rerun AI confidence, date-age or total-text heuristics. Currency changes require all monetary fields (`total_minor`, `tax_minor`, `line_items`) and `confirm_currency: true`; the browser asks the user to check their decimal values in the new currency, without FX conversion or reinterpreting stored minor units.
+
+Writes require the session and valid Origin. Entries and associated receipts must belong to that user; categories must be system defaults or owned by that user. Missing/inaccessible resources return 404 `not_found`. Only unassociated entries or receipts in `done`/`needs_review` can be edited; other receipt states return 409 `receipt_busy`. Stale versions return 409 `entry_changed`. Invalid bodies return 400 `invalid_body` with field paths only; malformed JSON returns 400 `invalid_json`; oversized bodies return 413 `body_too_large`; currency changes lacking confirmation return 400 `currency_confirmation_required`.
+
+A conditional D1 batch updates the entry and resolves its pending receipt atomically, clearing active error/retry time. Preserve raw extraction, original review reasons, confidence and usage evidence. Actual corrections turn source `ai` into `ai_edited`; unchanged confirmations keep `ai`, and other sources are preserved. Every successful save sets `reviewed_at` and advances `updated_at` strictly, including saves within the same millisecond. These timestamps are server-owned. Simply viewing an entry does not confirm it. Accuracy measurement uses explicitly reviewed entries only.
+
+The editor retains unsaved values after failures and conflicts, reloads the latest server state for comparison, and requires an explicit decision before retrying against a new version. A lost response must not cause a blind resubmit. Successful saves refresh all ledger filters/totals and receipt queries. Closing a dirty editor asks before discarding changes; signing out or changing accounts clears it. The complete review inbox and missing-entry creation remain M4.3.
+
+**Review workspace (November 17 user feedback):** desktop review shows the original receipt beside the editor, with independent scrolling and a fixed save/cancel footer. Small screens switch between receipt and details while retaining the form. A successful PATCH updates the matching recent receipt from the server-confirmed status immediately, cancels pre-save reads, and then refreshes queries; retained original warnings never imply current pending status.
+
+`GET /api/receipts/:id/file` is an authenticated, ownership-scoped read of the original Drive file for this workspace. The Worker streams Drive `files.get?alt=media` without buffering, parsing PDFs, or transforming images. Only stored JPEG/PNG/PDF MIME types are served, with private/no-store and nosniff headers. The browser holds a temporary object URL for display and revokes it on close/account change. Missing files return 404 `receipt_file_missing`; inaccessible receipts return 404 `not_found`; transient Drive failures return 503 `drive_unavailable`; revoked access uses the existing disconnect/session-expiry flow. Preview failure never blocks editing ledger data. This adds no storage, scope, or Drive write operations, and ordinary lists still do not call Drive.
+
 ### M4.1 read API contract (November 16, 2026)
 
 `GET /api/categories` returns `{ categories: [{ id, slug, name }] }`, containing system defaults and the session user's custom categories, ordered by display name then ID. Existing slug collisions remain visible; extraction keeps its existing user-category precedence.
@@ -324,7 +341,7 @@ The response is `{ entries, totals, nextCursor }`. Entries use the documented sn
 
 **Totals display (November 17, 2026):** the browser combines the API's monthly totals across the selected range into one grand total per currency, with one subtotal per category within that currency. Category review counts are combined across months and remain visible. These sums use exact integer minor units, including when the combined sum exceeds JavaScript's safe-number boundary. Filters still apply to every total, independently of pagination; currencies are never combined or converted.
 
-M4.1 exposes read-only browsing and details; editing/confirmation, the complete review inbox, category creation and deletion follow in M4.2–M4.5. Existing upload, receipt status and retry behavior remains available during this rollout.
+M4.1 provides browsing and details; M4.2 adds existing-entry editing and confirmation. The complete review inbox, category creation and deletion follow in M4.3–M4.5. Existing upload, receipt status and retry behavior remains available during this rollout.
 
 ## Security & privacy
 

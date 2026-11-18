@@ -185,9 +185,10 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
 
       <section>
         <h2 className="mb-3 font-medium">Recent receipts</h2>
+        {receipts.isError && receipts.data && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">Couldn't refresh receipts. Showing the last known status. <button className="underline" onClick={() => void receipts.refetch()}>Retry</button></p>}
         {receipts.isPending ? (
           <p className="text-sm text-slate-500">Loading…</p>
-        ) : receipts.isError ? (
+        ) : !receipts.data ? (
           <p className="text-sm text-red-600">Couldn't load receipts.</p>
         ) : receipts.data.length === 0 ? (
           <p className="text-sm text-slate-500">No receipts yet.</p>

@@ -3,6 +3,7 @@ import { ApiError } from "./api-error";
 export { ApiError } from "./api-error";
 import type { CategoryDto } from "../../worker/src/contracts/categories";
 import type { LedgerDetail, LedgerFilters, LedgerPage } from "../../worker/src/contracts/ledger";
+import type { LedgerPatch } from "../../worker/src/contracts/ledger-write";
 export type { LedgerSummary, LedgerTotal } from "../../worker/src/contracts/ledger";
 
 export interface Me {
@@ -71,3 +72,18 @@ export const retryReceipt = (id: string) =>
   call<{ receipt: Receipt }>(`/api/receipts/${encodeURIComponent(id)}/retry`, { method: "POST" });
 
 export const logout = () => call<void>("/auth/logout", { method: "POST" });
+
+export const patchLedgerEntry = (id: string, patch: LedgerPatch, signal?: AbortSignal) =>
+  call<{ entry: LedgerDetail }>(`/api/ledger/${encodeURIComponent(id)}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch), signal,
+  }).then((r) => r.entry);
+
+export async function getReceiptFile(id: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await fetch(`/api/receipts/${encodeURIComponent(id)}/file`, { credentials: "same-origin", cache: "no-store", signal });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    throw new ApiError(res.status, typeof body.error === "string" ? body.error : `http_${res.status}`);
+  }
+  if (!["image/jpeg", "image/png", "application/pdf"].includes(res.headers.get("Content-Type") ?? "")) throw new ApiError(415, "unsupported_type");
+  return res.blob();
+}

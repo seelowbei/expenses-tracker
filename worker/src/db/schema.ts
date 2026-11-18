@@ -89,6 +89,7 @@ export const ledgerEntries = sqliteTable(
     notes: text("notes"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    reviewedAt: text("reviewed_at"),
   },
   (t) => [
     index("idx_ledger_user_cat_date").on(t.userId, t.categoryId, t.txnDate),

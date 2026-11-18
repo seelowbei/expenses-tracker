@@ -50,7 +50,7 @@ export function readLedgerDetail(db: Db, userId: string, id: string) {
   return db.select({
     ...summary, tax_minor: ledger.taxMinor, payment_method: ledger.paymentMethod,
     line_items_json: ledger.lineItems, notes: ledger.notes, source: ledger.source,
-    confidence: ledger.confidence, created_at: ledger.createdAt, updated_at: ledger.updatedAt,
+    confidence: ledger.confidence, created_at: ledger.createdAt, updated_at: ledger.updatedAt, reviewed_at: ledger.reviewedAt,
     review_reasons_json: receipts.reviewReasons,
   }).from(ledger).innerJoin(categories, categoryJoin(userId)).leftJoin(receipts, receiptJoin(userId))
     .where(and(eq(ledger.userId, userId), eq(ledger.id, id))).get();
