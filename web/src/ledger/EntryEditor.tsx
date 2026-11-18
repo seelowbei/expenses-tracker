@@ -5,6 +5,7 @@ import { ApiError, getLedgerEntry, listCategories, patchLedgerEntry } from "../a
 import { clearSession } from "../query-client";
 import { EntryFields, editorButton } from "./EntryFields";
 import { entryForm, formPatch, type FormErrors } from "./form";
+import { syncReviewedEntry } from "./review-cache";
 import { formatMoney } from "./format";
 
 export function EntryEditor({ entry, account, onClose, onSaved }: {
@@ -63,11 +64,9 @@ export function EntryEditor({ entry, account, onClose, onSaved }: {
     setErrors({}); setMessage(""); setBusy(true);
     request.current = new AbortController();
     try {
-      await patchLedgerEntry(entry.id, result.patch, request.current.signal);
+      const saved = await patchLedgerEntry(entry.id, result.patch, request.current.signal);
       if (!active.current) return;
-      // Invalidate all ranges, including the entry's previous date/category and any receipt views.
-      for (const key of ["ledger", "ledger-detail", "receipts", "receipt-detail", "review"]) void qc.invalidateQueries({ queryKey: [key, account] });
-      onSaved();
+      if (await syncReviewedEntry(qc, account, saved) && active.current) onSaved();
     } catch (e) {
       if (!active.current) return;
       if (e instanceof ApiError && e.status === 401) { clearSession(qc); return; }
