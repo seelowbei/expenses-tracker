@@ -1,6 +1,6 @@
 # M4 plan — Ledger and review
 
-November 16, 2026. **M4.1 merged. M4.2 implemented and locally verified November 17, 2026; PR review and staging checks remain. M4.3–M4.5 remain planned.**
+November 18, 2026. **M4.1 and M4.2 are merged. M4.3 is implemented and locally verified on `codex/m4-3`; PR review and staging checks remain. M4.4–M4.5 remain planned.**
 
 Source: [Technical spec](../documents/Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. Implementation checklist: [todo.md](todo.md).
 
@@ -17,13 +17,13 @@ M4 does not include manual expense creation without a receipt, category rename/d
 - `worker/src/db/schema.ts` already has ledger entries, categories, receipt review reasons and raw extraction. Ledger entries have nullable transaction time, notes and receipt association; a unique receipt ID prevents duplicate entries.
 - `worker/src/db/categories.ts` already returns system defaults plus the signed-in user's categories. Custom categories take precedence over system categories with the same slug when resolving AI output.
 - `worker/src/pipeline/process.ts` inserts valid AI results, including results requiring review. Invalid output has no ledger row. The consumer claims only queued/processing receipts; terminal receipts are ignored, and writes are guarded by attempt number.
-- Category listing, bounded ledger list/detail and existing-entry PATCH are implemented alongside `/api/me` and the receipt routes. Receipt listing still returns the newest 50 and omits raw extraction and the associated ledger entry; the complete review backlog remains M4.3.
+- Category listing, bounded ledger list/detail and existing-entry PATCH are implemented alongside `/api/me` and the receipt routes. Receipt listing now supports bounded cursor pagination; detail exposes the owned entry ID or a validated draft, and receipt review creates missing entries atomically.
 - `web/src/App.tsx` contains sign-in, uploads, recent receipts and bounded status polling. `web/src/api.ts` holds typed calls; `web/src/ledger/` provides browsing and an existing-entry editor. Pure form/money logic is tested by the existing Worker test runner; browser verification uses synthetic data.
 - Workerd tests already supply authenticated users, fake Google/AI clients and D1 interleaving helpers. Reuse them for isolation and concurrent-write cases.
 
 ## Decisions and proposals
 
-Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The M4.2 existing-entry write proposals were adopted with the November 17 implementation request and recorded in the technical spec. Remaining M4.3–M4.5 details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
+Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The M4.2 existing-entry write proposals were adopted with the November 17 implementation request and recorded in the technical spec. The M4.3 review contracts were adopted with the November 18 implementation request and recorded in the spec. Remaining M4.4–M4.5 details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
 
 ### 1. Complete the review API
 
@@ -101,11 +101,11 @@ Keep the existing three-second receipt polling and 15-minute cap. When an observ
 
 ## M4.3 execution plan — November 18, 2026
 
-Branch: `codex/m4-3`, created from `origin/main`. Planning is complete; implementation has not started. This elaborates Tasks 6 and 9, preserving M4.4/M4.5 scope and existing staging follow-ups. These are proposed contracts; adopt them in the technical spec before dependent code.
+Branch: `codex/m4-3`, created from `origin/main`. Implementation and local verification are complete; PR review and staging remain. This implements Tasks 6 and 9, preserving M4.4/M4.5 scope and prior staging follow-ups. Contracts were adopted in the technical spec before dependent code. Evidence and verification limits: [M4.3 verification](../documents/M4.3%20verification.md).
 
 **Outcome:** every pending receipt is reachable, including missing-date/invalid-output receipts. A user can review an existing entry or create a missing entry exactly once, then see the inbox and currency-separated totals update without reloading.
 
-### Proposed contracts
+### Adopted contracts
 
 | Operation | Behavior |
 | --- | --- |
@@ -116,7 +116,7 @@ Branch: `codex/m4-3`, created from `origin/main`. Planning is complete; implemen
 
 All reads/joins use the session user; categories must be system defaults or owned. Unknown/foreign resources return `404 not_found`; writes retain Origin checks. Reuse `invalid_json`, `invalid_body` (field paths only) and `body_too_large` conventions.
 
-**Safe drafts:** parse stored extraction only on detail requests, with a proposed 64 KiB input bound. Null, malformed, oversized or non-object JSON yields an empty draft so manual completion remains possible. Validate each recognized field independently against human-edit constraints; omit invalid/unknown fields. Impossible dates, blank merchants, unsupported currencies and unknown category slugs stay blank. Resolve category slugs through the existing visible-category resolver, preserving custom-category precedence. Preserve explicit optional nulls. Never silently fill missing required values with today's date, zero, default currency or `Other`.
+**Safe drafts:** parse stored extraction only on detail requests, with a 64 KiB input bound. Null, malformed, oversized or non-object JSON yields an empty draft so manual completion remains possible. Validate each recognized field independently against human-edit constraints; omit invalid/unknown fields. Impossible dates, blank merchants, unsupported currencies and unknown category slugs stay blank. Resolve category slugs through the existing visible-category resolver, preserving custom-category precedence. Preserve explicit optional nulls. Never silently fill missing required values with today's date, zero, default currency or `Other`.
 
 Extraction amounts are decimal numbers; human saves use minor units. Convert only with a supported extracted currency and exact safe conversion. Omit over-precision/unsafe values instead of rounding; test exponent notation and zero-/three-decimal currencies. Without valid currency, omit monetary prefill. Validate a line-item collection as a whole (maximum 50, bounded descriptions, safe signed amounts); omit a malformed collection rather than silently dropping charges. Do not reuse the pipeline's rounding conversion for this path. Keep new draft logic outside `src/agent/`.
 
@@ -148,7 +148,7 @@ At the API checkpoint verify isolation, compatibility, conditional creation and 
 
 Rollback is a code revert: no destructive/down migration, infrastructure change or Drive mutation. Already-created entries remain valid ledger data. Custom categories, deletion UI/API, manual expenses, extraction changes and M5 stay out of scope.
 
-**Review point:** adopt DTOs, cursor behavior, draft omission and save/conflict semantics in slice 4.3-0 before implementation. Existing M3/M4.2 staging follow-ups remain separate; this plan does not claim them complete.
+**Contract adoption:** DTOs, cursor behavior, draft omission and save/conflict semantics were recorded in slice 4.3-0 before implementation. Existing M3/M4.2 staging follow-ups remain separate; this plan does not claim them complete.
 
 ## Recommended PR split
 

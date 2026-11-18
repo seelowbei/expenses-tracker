@@ -302,7 +302,9 @@ All `/api/*` routes need a valid session cookie and are scoped to the session's 
 | POST | `/api/receipts` | Multipart upload (≤ 5 MB) | 202 receipt / 409 duplicate |
 | POST | `/api/receipts/resumable` | Start Drive resumable upload (> 5 MB) | 200 `{ receiptId, uploadUrl }` |
 | POST | `/api/receipts/:id/complete` | Confirm resumable upload, enqueue | 202 |
-| GET | `/api/receipts?status=` | List receipts (for polling) | 200 |
+| GET | `/api/receipts?status=&cursor=&limit=` | Paginated receipt metadata (polling and review inbox) | 200 |
+| GET | `/api/receipts/:id` | Owned receipt, entry ID and safe partial review draft | 200 |
+| POST | `/api/receipts/:id/review` | Create a missing entry and complete invalid-output review | 201 / 409 |
 | POST | `/api/receipts/:id/retry` | Re-enqueue a failed receipt that still has its Drive file | 202 / 409 `not_retryable` / 409 `reupload_required` |
 | GET | `/api/ledger?from=&to=&category=` | Entries + totals by category/month | 200 |
 | PATCH | `/api/ledger/:id` | Edit fields / category | 200 |
@@ -335,7 +337,7 @@ Writes require the session and valid Origin. Entries and associated receipts mus
 
 A conditional D1 batch updates the entry and resolves its pending receipt atomically, clearing active error/retry time. Preserve raw extraction, original review reasons, confidence and usage evidence. Actual corrections turn source `ai` into `ai_edited`; unchanged confirmations keep `ai`, and other sources are preserved. Every successful save sets `reviewed_at` and advances `updated_at` strictly, including saves within the same millisecond. These timestamps are server-owned. Simply viewing an entry does not confirm it. Accuracy measurement uses explicitly reviewed entries only.
 
-The editor retains unsaved values after failures and conflicts, reloads the latest server state for comparison, and requires an explicit decision before retrying against a new version. A lost response must not cause a blind resubmit. Successful saves refresh all ledger filters/totals and receipt queries. Closing a dirty editor asks before discarding changes; signing out or changing accounts clears it. The complete review inbox and missing-entry creation remain M4.3.
+The editor retains unsaved values after failures and conflicts, reloads the latest server state for comparison, and requires an explicit decision before retrying against a new version. A lost response must not cause a blind resubmit. Successful saves refresh all ledger filters/totals and receipt queries. Closing a dirty editor asks before discarding changes; signing out or changing accounts clears it. The M4.3 contract above provides the complete review inbox and missing-entry creation.
 
 **Review workspace (November 17 user feedback):** desktop review shows the original receipt beside the editor, with independent scrolling and a fixed save/cancel footer. Small screens switch between receipt and details while retaining the form. A successful PATCH updates the matching recent receipt from the server-confirmed status immediately, cancels pre-save reads, and then refreshes queries; retained original warnings never imply current pending status.
 
@@ -353,7 +355,7 @@ The response is `{ entries, totals, nextCursor }`. Entries use the documented sn
 
 **Totals display (November 17, 2026):** the browser combines the API's monthly totals across the selected range into one grand total per currency, with one subtotal per category within that currency. Category review counts are combined across months and remain visible. These sums use exact integer minor units, including when the combined sum exceeds JavaScript's safe-number boundary. Filters still apply to every total, independently of pagination; currencies are never combined or converted.
 
-M4.1 provides browsing and details; M4.2 adds existing-entry editing and confirmation. The complete review inbox, category creation and deletion follow in M4.3–M4.5. Existing upload, receipt status and retry behavior remains available during this rollout.
+M4.1 provides browsing and details; M4.2 adds existing-entry editing and confirmation. M4.3 adds the complete review inbox; category creation and deletion follow in M4.4–M4.5. Existing upload, receipt status and retry behavior remains available during this rollout.
 
 ## Security & privacy
 

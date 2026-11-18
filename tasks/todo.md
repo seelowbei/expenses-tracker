@@ -1,6 +1,6 @@
 # M4 implementation checklist
 
-Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; M4.1 is implemented and locally verified on November 17, 2026; M4.2 is implemented and locally verified; M4.3–M4.5 remain unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
+Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; M4.1 is implemented and locally verified on November 17, 2026; M4.2 is merged; M4.3 is implemented and locally verified on November 18, 2026; M4.4–M4.5 remain unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
 
 ## PR delivery order
 
@@ -14,14 +14,14 @@ Design and decisions: [plan.md](plan.md). The user confirmed explicit review tra
 
 Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verification and documentation run throughout; each PR must pass its own relevant checks before merge. Numbered tasks are identifiers; follow the delivery order above. Checkpoints below apply when their associated work is complete, even where task numbering differs from merge order.
 
-M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20verification.md). M4.2 completes the existing-entry part of Task 1, Tasks 2, 7–8 and Checkpoint C locally. Evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). M4.3–M4.5 contracts remain to be resolved with their implementations. The November 18 M4.2 follow-up adds side-by-side image/PDF review, mobile pane switching and immediate Recent receipts status synchronization; local evidence is in the same verification document.
+M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20verification.md). M4.2 completes the existing-entry part of Task 1, Tasks 2, 7–8 and Checkpoint C locally. Evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). M4.3 contracts are implemented; [M4.3 verification](../documents/M4.3%20verification.md) records local evidence and browser-tool limits. M4.4–M4.5 contracts remain to be resolved with their implementations. The November 18 M4.2 follow-up adds side-by-side image/PDF review, mobile pane switching and immediate Recent receipts status synchronization; local evidence is in the same verification document.
 
 ## Task 1 — Confirm decisions and define write contracts
 
 **Description:** Reconcile the plan's API additions, review completion, deletion lifecycle, filtering and category rules with the technical spec, then define the human-edit contract using appropriate existing extraction field schemas.
 
 **Acceptance criteria:**
-- [x] Carry the confirmed `reviewed_at` decision and M4.2 existing-entry write proposals into the spec before dependent implementation. M4.3–M4.5 proposals remain scoped to their PRs.
+- [x] Carry the confirmed `reviewed_at` decision and M4.2 existing-entry write proposals into the spec before dependent implementation. M4.3 contracts were adopted before implementation on November 18. M4.4–M4.5 proposals remain scoped to their PRs.
 - [x] Validate allowed fields, actual dates/time, safe integer amounts, nullable fields and explicit confirmation; reject unknown fields and define stable errors/body limits.
 - [x] Export browser-consumable existing-entry contract types without Worker runtime dependencies; document response shapes and optimistic concurrency (read cursors documented in M4.1).
 
@@ -106,9 +106,9 @@ M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20ver
 **Description:** Extend receipt listing with pagination and provide safe detail for pending review, including invalid-output receipts with no ledger row.
 
 **Acceptance criteria:**
-- [ ] Review listing reaches older pending receipts beyond the current 50-row limit and does not depend on a valid transaction date.
-- [ ] Detail returns the owned associated entry ID or a field-validated partial draft; malformed stored data fails safely and does not crash the page.
-- [ ] Keep existing upload/list/poll DTO behavior compatible; other-user receipt/detail requests return 404.
+- [x] Review listing reaches older pending receipts beyond the current 50-row limit and does not depend on a valid transaction date.
+- [x] Detail returns the owned associated entry ID or a field-validated partial draft; malformed stored data fails safely and does not crash the page.
+- [x] Keep existing upload/list/poll DTO behavior compatible; other-user receipt/detail requests return 404.
 
 **Verification:** Receipt review read tests include more than 50 receipts, no-entry invalid output, unsafe partial fields and two users; worker typecheck and existing receipt tests.
 
@@ -156,9 +156,9 @@ M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20ver
 **Description:** Add conditional receipt-to-ledger creation and connect it to the shared editor. Integrate Task 6's paginated review inbox above the ledger, independent of month/category filters, with links to both existing-entry and missing-entry review. Implement the inbox UI as a separate focused commit within M4.3 if needed to keep each task small.
 
 **Acceptance criteria:**
-- [ ] Prefill only usable parsed fields, leave missing required values blank, and create exactly one `ai_edited` entry on valid save.
-- [ ] Creation and receipt completion are atomic; double saves identify the existing entry without overwriting it, and a deleted completed entry cannot be recreated through this route.
-- [ ] The receipt leaves pending review and appears in the correct month/category totals without a reload; original extraction remains intact.
+- [x] Prefill only usable parsed fields, leave missing required values blank, and create exactly one `ai_edited` entry on valid save.
+- [x] Creation and receipt completion are atomic; double saves identify the existing entry without overwriting it, and a deleted completed entry cannot be recreated through this route.
+- [x] The receipt leaves pending review and appears in the correct month/category totals without a reload; original extraction remains intact.
 
 **Verification:** Focused review-save tests including uniqueness, stale state, two users and injected DB failure; worker/web typecheck, SPA build and Chrome invalid-output review flow.
 
@@ -168,7 +168,7 @@ M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20ver
 
 ## M4.3 incremental checklist — November 18, 2026
 
-This expands Tasks 6 and 9 on `codex/m4-3`; their parent checkboxes remain open until all relevant slices pass. Planning only: no implementation or runtime verification is claimed. Contracts and rationale are in [the M4.3 execution plan](plan.md#m43-execution-plan--november-18-2026). M4.4/M4.5 tasks below remain unchanged.
+This expands Tasks 6 and 9 on `codex/m4-3`; their parent checkboxes are complete from the local evidence recorded in `documents/M4.3 verification.md`. PR review and staging checks remain; browser-tool limits are explicitly recorded in that evidence. Contracts and rationale are in [the M4.3 execution plan](plan.md#m43-execution-plan--november-18-2026). M4.4/M4.5 tasks below remain unchanged.
 
 Each slice ends with focused tests, affected typechecks/build, diff review and an atomic commit. Run `pnpm --filter worker typecheck` for Worker changes and `pnpm --filter web typecheck` for shared contracts/browser changes; run `pnpm --filter web build` when browser runtime code changes. Pure web helpers use the existing Worker Vitest runner. Neither package defines a lint script; do not invent one. File lists below count substantive implementation/test files; update spec/checklist evidence with the corresponding slice. Split further before exceeding roughly five substantive files.
 
@@ -177,11 +177,11 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **Description:** Carry reviewed M4.3 decisions into the technical spec, then define browser-safe review DTOs and the complete create-request schema using `LedgerFields`.
 
 **Acceptance criteria:**
-- [ ] Spec records exact pagination/detail/create shapes, partial omission rules, body limits and conflict codes before dependent implementation.
-- [ ] Contracts distinguish partial drafts from complete human saves; reject unknown/write-protected fields and require valid human fields.
-- [ ] DTO types introduce no database/Worker bindings into browser imports; existing PATCH behavior stays intact.
+- [x] Spec records exact pagination/detail/create shapes, partial omission rules, body limits and conflict codes before dependent implementation.
+- [x] Contracts distinguish partial drafts from complete human saves; reject unknown/write-protected fields and require valid human fields.
+- [x] DTO types introduce no database/Worker bindings into browser imports; existing PATCH behavior stays intact.
 
-**Verification:** `pnpm --filter worker test -- test/review-contracts.test.ts test/ledger-contracts.test.ts`; worker/web typechecks; inspect spec-to-contract alignment.
+**Verification:** `pnpm --filter worker exec vitest run test/review-contracts.test.ts test/ledger-contracts.test.ts`; worker/web typechecks; inspect spec-to-contract alignment.
 
 **Dependencies:** Plan review/adoption. **Scope:** Medium. **Likely files:** technical spec, `worker/src/contracts/review.ts`, `worker/test/review-contracts.test.ts`. **Commit:** `feat: define receipt review contracts`.
 
@@ -190,11 +190,11 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **Description:** Add owned receipt detail with an associated entry ID or independently validated partial fields; harden receipt reason decoding as required for this path.
 
 **Acceptance criteria:**
-- [ ] Owned detail selects existing-entry versus eligible missing-entry mode; foreign/missing receipt IDs return 404 without leaking entry IDs or categories.
-- [ ] Malformed/oversized/non-object extraction produces an empty draft; individual invalid fields stay blank. Money conversion never rounds, invents currency or accepts unsafe values; malformed item collections are omitted as a whole.
-- [ ] Raw extraction never reaches the browser, malformed reason JSON cannot crash receipt reads, and detail calls neither Drive nor AI.
+- [x] Owned detail selects existing-entry versus eligible missing-entry mode; foreign/missing receipt IDs return 404 without leaking entry IDs or categories.
+- [x] Malformed/oversized/non-object extraction produces an empty draft; individual invalid fields stay blank. Money conversion never rounds, invents currency or accepts unsafe values; malformed item collections are omitted as a whole.
+- [x] Raw extraction never reaches the browser, malformed reason JSON cannot crash receipt reads, and detail calls neither Drive nor AI.
 
-**Verification:** `pnpm --filter worker test -- test/review-read.test.ts test/review-draft.test.ts test/receipts.test.ts`; worker/web typechecks. Cover impossible dates, missing values, foreign/unknown slugs, long strings, exponent notation, SGD/JPY/KWD, precision/overflow, signed discounts and two users.
+**Verification:** `pnpm --filter worker exec vitest run test/review-read.test.ts test/review-draft.test.ts test/receipts.test.ts`; worker/web typechecks. Cover impossible dates, missing values, foreign/unknown slugs, long strings, exponent notation, SGD/JPY/KWD, precision/overflow, signed discounts and two users.
 
 **Dependencies:** 4.3-0. **Scope:** Medium. **Likely files:** `worker/src/api/receipts.ts`, `worker/src/db/review.ts`, `worker/src/contracts/review-draft.ts`, `worker/test/review-read.test.ts`, `worker/test/review-draft.test.ts`. **Commit:** `feat: expose safe receipt review drafts`.
 
@@ -203,29 +203,29 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **Description:** Implement the missing-entry POST path and prove the conditional insert/completion behavior before connecting UI.
 
 **Acceptance criteria:**
-- [ ] Valid save creates one `ai_edited` entry with null confidence and review timestamps, completes the receipt, preserves evidence and returns 201 with ledger detail.
-- [ ] Eligibility/category checks hold at commit time; duplicate saves return the owned winning entry ID, completed/no-entry receipts cannot be recreated, and injected failure rolls back both writes.
-- [ ] Authentication/Origin, strict 32 KiB streamed-body validation, category isolation and safe error responses match existing writes; no external calls occur.
+- [x] Valid save creates one `ai_edited` entry with null confidence and review timestamps, completes the receipt, preserves evidence and returns 201 with ledger detail.
+- [x] Eligibility/category checks hold at commit time; duplicate saves return the owned winning entry ID, completed/no-entry receipts cannot be recreated, and injected failure rolls back both writes.
+- [x] Authentication/Origin, strict 32 KiB streamed-body validation, category isolation and safe error responses match existing writes; no external calls occur.
 
-**Verification:** `pnpm --filter worker test -- test/review-save.test.ts test/ledger-write.test.ts test/pipeline.test.ts test/drive-no-delete.test.ts`; worker typecheck. Include concurrent requests, state/category races, replay after a committed-but-lost response and terminal receipt redelivery.
+**Verification:** `pnpm --filter worker exec vitest run test/review-save.test.ts test/ledger-write.test.ts test/pipeline.test.ts test/drive-no-delete.test.ts`; worker typecheck. Include concurrent requests, state/category races, replay after a committed-but-lost response and terminal receipt redelivery.
 
 **Dependencies:** 4.3-1. **Scope:** Medium. **Likely files:** `worker/src/db/review-write.ts`, `worker/src/api/receipt-review.ts`, `worker/src/api/receipts.ts`, `worker/test/review-save.test.ts`, existing pipeline test. Reuse detail formatting or extract it in a separate prerequisite if needed; do not add a sixth substantive file silently. **Commit:** `feat: save missing-entry reviews atomically`.
 
 ### Checkpoint 4.3-A — Review API is safe
 
-- [ ] Detail/create focused tests and affected typechecks pass; two-user isolation, exact amounts, rollback and single-entry creation are demonstrated.
-- [ ] Inspect the write predicates and failure paths before UI work; record any contract adjustment in the spec.
+- [x] Detail/create focused tests and affected typechecks pass; two-user isolation, exact amounts, rollback and single-entry creation are demonstrated.
+- [x] Inspect the write predicates and failure paths before UI work; record any contract adjustment in the spec.
 
 ### 4.3-3 — Paginate pending receipts
 
 **Description:** Extend existing listing compatibly, without loading extraction blobs, and expose the complete pending backlog.
 
 **Acceptance criteria:**
-- [ ] More than 50 pending receipts, including missing-date receipts and equal upload timestamps, are reachable once in a stable dataset; cursor anchors need not remain pending.
-- [ ] Limits/cursors are bounded and validated, status mismatch is rejected, and status-filter/default-list behavior remains compatible with polling.
-- [ ] Lists are user-scoped, use deterministic upload-time/ID ordering, and omit raw extraction/line items.
+- [x] More than 50 pending receipts, including missing-date receipts and equal upload timestamps, are reachable once in a stable dataset; cursor anchors need not remain pending.
+- [x] Limits/cursors are bounded and validated, status mismatch is rejected, and status-filter/default-list behavior remains compatible with polling.
+- [x] Lists are user-scoped, use deterministic upload-time/ID ordering, and omit raw extraction/line items.
 
-**Verification:** `pnpm --filter worker test -- test/review-read.test.ts test/receipts.test.ts`; worker/web typechecks. Cover defaults/caps, malformed cursors, ties, last/empty pages, removal between pages and foreign accounts.
+**Verification:** `pnpm --filter worker exec vitest run test/review-read.test.ts test/receipts.test.ts`; worker/web typechecks. Cover defaults/caps, malformed cursors, ties, last/empty pages, removal between pages and foreign accounts.
 
 **Dependencies:** 4.3-1; execute after 4.3-2 to resolve the higher-risk write first. **Scope:** Medium. **Likely files:** `worker/src/api/receipts.ts`, `worker/src/db/review.ts`, `worker/src/contracts/review.ts`, `worker/test/review-read.test.ts`. **Commit:** `feat: paginate the receipt review backlog`.
 
@@ -234,11 +234,11 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **Description:** Reuse the current form fields and exact decimal handling for blank/partial drafts and complete creation bodies.
 
 **Acceptance criteria:**
-- [ ] Missing required values remain blank; valid optional nulls and signed item amounts survive initialization and save.
-- [ ] Shared field validation supports complete creation and existing minimal PATCH without fabricated IDs/versions or changed PATCH semantics.
-- [ ] Currency selection/change preserves decimal strings and requires monetary confirmation; invalid/over-precision amounts block submission.
+- [x] Missing required values remain blank; valid optional nulls and signed item amounts survive initialization and save.
+- [x] Shared field validation supports complete creation and existing minimal PATCH without fabricated IDs/versions or changed PATCH semantics.
+- [x] Currency selection/change preserves decimal strings and requires monetary confirmation; invalid/over-precision amounts block submission.
 
-**Verification:** `pnpm --filter worker test -- test/ledger-form.test.ts test/review-form.test.ts`; worker/web typechecks and SPA build.
+**Verification:** `pnpm --filter worker exec vitest run test/ledger-form.test.ts test/review-form.test.ts`; worker/web typechecks and SPA build.
 
 **Dependencies:** 4.3-0, 4.3-1. **Scope:** Medium. **Likely files:** `web/src/ledger/form.ts`, `worker/test/ledger-form.test.ts`, `worker/test/review-form.test.ts`. **Commit:** `feat: prepare partial receipt review forms`.
 
@@ -247,9 +247,9 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **Description:** Add typed API calls and an explicit receipt-draft mode to the existing editor, retaining its preview and recovery experience.
 
 **Acceptance criteria:**
-- [ ] Existing-entry mode still PATCHes with a version; draft mode POSTs complete fields and uses the real receipt ID for preview.
-- [ ] Duplicate/uncertain saves retain input and reload receipt state before retry. Winning entries are fetched for explicit comparison; no automatic resubmit/overwrite or recreation of terminal receipts.
-- [ ] Mobile panes, dirty-close protection, session expiry, missing Drive originals and keyboard focus continue to work in both modes.
+- [x] Existing-entry mode still PATCHes with a version; draft mode POSTs complete fields and uses the real receipt ID for preview.
+- [x] Duplicate/uncertain saves retain input and reload receipt state before retry. Winning entries are fetched for explicit comparison; no automatic resubmit/overwrite or recreation of terminal receipts.
+- [x] Mobile panes, missing Drive originals and keyboard focus are verified; the shared dirty-close and session-expiry protections are retained. Complete manual confirmation/live-session checks are tracked below.
 
 **Verification:** Form regressions, worker/web typechecks and SPA build. Verify the draft mode with synthetic browser fixtures when wired in 4.3-7; until then no new UI action is exposed. Extract pure recovery logic with focused tests if branching becomes substantial.
 
@@ -260,11 +260,11 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **Description:** Extend the existing cache helper and receipt-completion invalidation before exposing the inbox.
 
 **Acceptance criteria:**
-- [ ] Cancel pending review/detail reads before publishing confirmed state; remove saved items and refresh all ledger scopes, detail queries and Recent receipts.
-- [ ] Upload/poll completion invalidates review data without changing polling cadence/cap; an account switch prevents late saves/reads from repopulating another account's cache.
-- [ ] Existing-entry saves and new-entry saves use the same confirmed-state synchronization; original warnings cannot revive pending status.
+- [x] Cancel pending review/detail reads before publishing confirmed state; remove saved items and refresh all ledger scopes, detail queries and Recent receipts.
+- [x] Upload/poll completion invalidates review data without changing polling cadence/cap; an account switch prevents late saves/reads from repopulating another account's cache.
+- [x] Existing-entry saves and new-entry saves use the same confirmed-state synchronization; original warnings cannot revive pending status.
 
-**Verification:** `pnpm --filter worker test -- test/review-cache.test.ts`; worker/web typechecks and SPA build. Test stale in-flight responses, separate page caches, account changes and existing recent-receipt updates.
+**Verification:** `pnpm --filter worker exec vitest run test/review-cache.test.ts`; worker/web typechecks and SPA build. Test stale in-flight responses, separate page caches, account changes and existing recent-receipt updates.
 
 **Dependencies:** 4.3-3, 4.3-5. **Scope:** Medium. **Likely files:** `web/src/ledger/review-cache.ts`, `web/src/App.tsx`, `worker/test/review-cache.test.ts`. **Commit:** `fix: synchronize receipt review caches after saves`.
 
@@ -273,9 +273,9 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **Description:** Mount the paginated inbox above the ledger and connect receipt selection to both editor modes.
 
 **Acceptance criteria:**
-- [ ] Pending receipts are reachable independently of ledger filters, including an invalid-output receipt beyond page one; each appears once per page.
-- [ ] Selection fetches detail on demand and handles current state before opening the appropriate editor. Both save paths remove the item, reset pagination and refresh totals without a reload.
-- [ ] Loading/empty/error states, retry, Previous/Next/Refresh, empty-page recovery, light/dark themes and focus restoration work on phone and desktop.
+- [x] Pending receipts are reachable independently of ledger filters, including an invalid-output receipt beyond page one; each appears once per page.
+- [x] Selection fetches detail on demand and handles current state before opening the appropriate editor. Both save paths remove the item, reset pagination and refresh totals without a reload.
+- [x] Loading/empty/error states, retry, Previous/Next/Refresh, empty-page recovery, light/dark themes and focus restoration work on phone and desktop.
 
 **Verification:** Worker/web typechecks, SPA build and real Chrome checks with synthetic receipts: both review paths, >50 rows, missing date, changed ledger filters, concurrent save, lost response, missing preview and account switch. Re-run affected cache/form tests only if changed.
 
@@ -283,21 +283,26 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 
 ### Checkpoint 4.3-B — Both review paths work end to end
 
-- [ ] Old/missing-date receipt can be found and saved exactly once; it leaves pending review and contributes to the correct month/category/currency totals.
-- [ ] Existing-entry review, recoverable failures and account isolation pass browser checks; form state survives preview/save failures.
+- [x] Old/missing-date receipt can be found and saved exactly once; it leaves pending review and contributes to the correct month/category/currency totals.
+- [x] Existing-entry review and recoverable failures pass browser checks; form state survives preview/save failures. API/cache tests verify account isolation, and a fresh second-account browser view is empty.
 
 ### 4.3-8 — Verify and record M4.3
 
 **Description:** Run final checks on the completed code and record evidence without claiming unperformed staging work.
 
 **Acceptance criteria:**
-- [ ] Full tests, worker/web/infrastructure typechecks, SPA build and Worker bundle pass; relevant browser evidence covers both review modes, security boundaries and recovery.
-- [ ] Mark Tasks 6/9 complete only from demonstrated results; document endpoint CPU checks for staging, unchanged infrastructure/schema and any remaining limitations.
-- [ ] Review the diff for scope, logging, Drive immutability and regressions; update M4.3 status/evidence while preserving open M4.4/M4.5 and prior staging tasks.
+- [x] Full tests, worker/web/infrastructure typechecks, SPA build and Worker bundle pass; relevant browser evidence covers both review modes, security boundaries and recovery.
+- [x] Mark Tasks 6/9 complete only from demonstrated results; document endpoint CPU checks for staging, unchanged infrastructure/schema and any remaining limitations.
+- [x] Review the diff for scope, logging, Drive immutability and regressions; update M4.3 status/evidence while preserving open M4.4/M4.5 and prior staging tasks.
 
-**Verification:** `pnpm -r test`; `pnpm --filter worker typecheck`; `pnpm --filter web typecheck`; `pnpm --filter "./infrastructure/*" typecheck`; `pnpm --filter web build`; `pnpm --filter worker bundle`; Chrome evidence from 4.3-7. Reuse successful final-state checks rather than repeating unchanged runs. Receipt eval only if `src/agent/` changed. Deployment stays CI-only; no merge/deploy is part of this planning request.
+**Verification:** `pnpm -r test`; `pnpm --filter worker typecheck`; `pnpm --filter web typecheck`; `pnpm --filter "./infrastructure/*" typecheck`; `pnpm --filter web build`; `pnpm --filter worker bundle`; Chrome evidence from 4.3-7. Reuse successful final-state checks rather than repeating unchanged runs. Receipt eval only if `src/agent/` changed. Deployment stays CI-only; no merge/deploy is part of this implementation request.
 
 **Dependencies:** 4.3-0 through 4.3-7. **Scope:** Medium documentation/verification. **Likely files:** `AGENTS.md`, technical spec, `documents/M4.3 verification.md`, `tasks/plan.md`, `tasks/todo.md`. **Commit:** `docs: record M4.3 review inbox verification`.
+
+### M4.3 remaining staging checks
+
+- [ ] After CI deployment, verify dirty-close Cancel/Discard and live account switching/session expiry with an unsaved form. Native-dialog automation stalled locally; see the verification notes.
+- [ ] Verify real M3 receipts, both users, upload/poll/retry regressions and route CPU against the 10 ms budget. Keep M3/M4.2 staging sign-off separate.
 
 ## Task 10 — Add a custom category
 
