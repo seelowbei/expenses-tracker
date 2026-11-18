@@ -12,6 +12,11 @@ import { sha256Hex } from "../lib/encoding";
 import { log } from "../lib/log";
 import { sniffMime, type AllowedMime } from "../lib/sniff";
 import { receiptFileRoutes } from "./receipt-file";
+import { reviewDraft } from "../contracts/review-draft";
+import type { ReviewDetail } from "../contracts/review";
+import { StoredReasons } from "../contracts/ledger";
+import { readReviewReceipt } from "../db/review";
+import { categoriesFor } from "../db/categories";
 import { enqueueOrPark } from "../pipeline/enqueue";
 
 /** Direct multipart limit. Larger files need the resumable flow (deferred to M5). */
@@ -26,7 +31,11 @@ export function driveFileName(createdAt: string, receiptId: string, mime: Allowe
   return `${createdAt.slice(0, 10)}_${receiptId}.${EXT[mime]}`;
 }
 
-export function toReceiptDto(r: Receipt) {
+export function toReceiptDto(r: Omit<Receipt, "rawExtraction" | "userId" | "sha256" | "driveFileId" | "attempts">) {
+  let reasons: string[] | null = null;
+  try {
+    if (r.reviewReasons && r.reviewReasons.length <= 65536) reasons = StoredReasons.parse(JSON.parse(r.reviewReasons));
+  } catch { /* Invalid stored warnings must not block manual review. */ }
   return {
     id: r.id,
     status: r.status,
@@ -36,7 +45,7 @@ export function toReceiptDto(r: Receipt) {
     error: r.error,
     /** Set while parked (AI quota or queue unavailable): the cron sends it again after this time. */
     retryAfter: r.retryAfter,
-    reviewReasons: r.reviewReasons ? (JSON.parse(r.reviewReasons) as string[]) : null,
+    reviewReasons: reasons,
     createdAt: r.createdAt,
   };
 }
@@ -60,6 +69,16 @@ receiptRoutes.get("/", async (c) => {
     : eq(receipts.userId, user.id);
   const rows = await c.var.db.select().from(receipts).where(where).orderBy(desc(receipts.createdAt)).limit(50);
   return c.json({ receipts: rows.map(toReceiptDto) });
+});
+
+receiptRoutes.get("/:id", async (c) => {
+  const row = await readReviewReceipt(c.var.db, c.var.user.id, c.req.param("id"));
+  if (!row) return c.json({ error: "not_found" }, 404);
+  const { receipt, entryId } = row;
+  const draft = !entryId && receipt.status === "needs_review" && receipt.error === "invalid_output"
+    ? reviewDraft(receipt.rawExtraction, await categoriesFor(c.var.db, c.var.user.id)) : null;
+  const body: ReviewDetail = { receipt: toReceiptDto(receipt), entryId, draft };
+  return c.json(body);
 });
 
 receiptRoutes.post("/", async (c) => {
