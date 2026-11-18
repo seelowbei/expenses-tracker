@@ -17,3 +17,6 @@ export interface ReceiptMetadata {
 }
 export interface ReviewDetail { receipt: ReceiptMetadata; entryId: string | null; draft: ReviewDraft | null }
 export interface ReceiptPage { receipts: ReceiptMetadata[]; nextCursor: string | null }
+
+export const ReceiptCursor = z.object({ id: z.string().min(1).max(120), createdAt: z.iso.datetime(), status: z.string().max(100) }).strict();
+export type ReceiptCursor = z.infer<typeof ReceiptCursor>;

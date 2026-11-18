@@ -1,5 +1,5 @@
 // /api/receipts: direct upload to Drive (spec "Key flows" 2), listing for polling, retry of failed receipts.
-import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../app-env";
@@ -8,15 +8,15 @@ import { nowIso } from "../db/client";
 import { RECEIPT_STATUSES, receipts, type Receipt } from "../db/schema";
 import { DriveDisconnectedError, ensureFolder, withDrive } from "../drive/access";
 import { DriveError } from "../drive/client";
-import { sha256Hex } from "../lib/encoding";
+import { fromBase64Url, toBase64Url, sha256Hex } from "../lib/encoding";
 import { log } from "../lib/log";
 import { sniffMime, type AllowedMime } from "../lib/sniff";
 import { receiptReviewRoutes } from "./receipt-review";
 import { receiptFileRoutes } from "./receipt-file";
 import { reviewDraft } from "../contracts/review-draft";
-import type { ReviewDetail } from "../contracts/review";
+import { ReceiptCursor, type ReviewDetail, type ReceiptPage } from "../contracts/review";
 import { StoredReasons } from "../contracts/ledger";
-import { readReviewReceipt } from "../db/review";
+import { readReviewReceipt, readReceiptPage } from "../db/review";
 import { categoriesFor } from "../db/categories";
 import { enqueueOrPark } from "../pipeline/enqueue";
 
@@ -65,12 +65,23 @@ receiptRoutes.route("/", receiptReviewRoutes);
 receiptRoutes.get("/", async (c) => {
   const status = StatusQuery.safeParse(c.req.query("status"));
   if (!status.success) return c.json({ error: "invalid_status" }, 400);
-  const user = c.var.user;
-  const where = status.data.length
-    ? and(eq(receipts.userId, user.id), inArray(receipts.status, status.data))
-    : eq(receipts.userId, user.id);
-  const rows = await c.var.db.select().from(receipts).where(where).orderBy(desc(receipts.createdAt)).limit(50);
-  return c.json({ receipts: rows.map(toReceiptDto) });
+  const limitText = c.req.query("limit") ?? "50";
+  if (!/^[1-9]\d{0,2}$/.test(limitText) || Number(limitText) > 100) return c.json({ error: "invalid_filters" }, 400);
+  const statuses = [...new Set(status.data)].sort();
+  const cursorText = c.req.query("cursor");
+  let cursor: ReceiptCursor | null = null;
+  if (cursorText !== undefined) {
+    if (!cursorText || cursorText.length > 1024) return c.json({ error: "invalid_filters" }, 400);
+    try { cursor = ReceiptCursor.parse(JSON.parse(new TextDecoder().decode(fromBase64Url(cursorText)))); }
+    catch { return c.json({ error: "invalid_filters" }, 400); }
+    if (cursor.status !== statuses.join(",")) return c.json({ error: "invalid_filters" }, 400);
+  }
+  const limit = Number(limitText);
+  const rows = await readReceiptPage(c.var.db, c.var.user.id, statuses, cursor, limit);
+  const page = rows.slice(0, limit), last = page.at(-1);
+  const body: ReceiptPage = { receipts: page.map(toReceiptDto), nextCursor: rows.length > limit && last
+    ? toBase64Url(new TextEncoder().encode(JSON.stringify({ id: last.id, createdAt: last.createdAt, status: statuses.join(",") }))) : null };
+  return c.json(body);
 });
 
 receiptRoutes.get("/:id", async (c) => {
