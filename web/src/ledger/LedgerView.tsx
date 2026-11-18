@@ -9,7 +9,7 @@ import { summarizeTotals } from "./totals";
 
 const control = "min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900";
 
-export function LedgerView({ account }: { account: string }) {
+export function LedgerView({ account, onReviewed }: { account: string; onReviewed: () => void }) {
   const [editing, setEditing] = useState<LedgerDetail | null>(null);
   const [notice, setNotice] = useState("");
   const [month, setMonth] = useState(localMonth);
@@ -40,7 +40,7 @@ export function LedgerView({ account }: { account: string }) {
   return (
     <section aria-labelledby="ledger-heading" className="space-y-4">
       {notice && <p role="status" className="text-sm text-teal-700 dark:text-teal-400">{notice}</p>}
-      {editing && <EntryEditor entry={editing} account={account} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setNotice("Review saved. Ledger totals updated."); }} />}
+      {editing && <EntryEditor entry={editing} account={account} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setNotice("Review saved. Ledger totals updated."); onReviewed(); }} />}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="ledger-heading" tabIndex={-1} className="text-lg font-semibold">Ledger</h2>
         <button className={control} onClick={() => { resetPage(); void ledger.refetch(); }} disabled={ledger.isFetching}>Refresh ledger</button>

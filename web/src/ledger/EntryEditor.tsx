@@ -10,10 +10,10 @@ import { syncReviewedEntry } from "./review-cache";
 import { ReceiptPreview } from "./ReceiptPreview";
 import { formatMoney } from "./format";
 
-type EditorProps = { account: string; onClose: () => void; onSaved: () => void } & (
+type EditorProps = { focusTargetId?: string; account: string; onClose: () => void; onSaved: () => void } & (
   { entry: LedgerDetail; review?: never } | { entry?: never; review: ReviewDetail & { draft: ReviewDraft } }
 );
-export function EntryEditor({ entry, review, account, onClose, onSaved }: EditorProps) {
+export function EntryEditor({ entry, review, account, onClose, onSaved, focusTargetId = "ledger-heading" }: EditorProps) {
   const qc = useQueryClient();
   const dialog = useRef<HTMLDialogElement>(null);
   const detailsPane = useRef<HTMLDivElement>(null);
@@ -42,8 +42,11 @@ export function EntryEditor({ entry, review, account, onClose, onSaved }: Editor
     dialog.current?.showModal();
     return () => {
       active.current = false; request.current?.abort();
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
-      else document.getElementById(review ? "review-heading" : "ledger-heading")?.focus();
+      // Wait for the saved row and pagination updates to finish before restoring focus.
+      requestAnimationFrame(() => {
+        if (opener instanceof HTMLElement && opener.isConnected && opener.tabIndex >= 0) opener.focus();
+        else document.getElementById(focusTargetId)?.focus();
+      });
     };
   }, []);
   useEffect(() => {
@@ -148,7 +151,7 @@ export function EntryEditor({ entry, review, account, onClose, onSaved }: Editor
                   setBase(latest); setForm(entryForm(latest)); setErrors({}); setCurrencyConfirmed(false); setMustReload(false); setLatest(null); setMessage("");
                 }}>Use latest saved values</button>
               </div>
-            </> : <p>Reload the saved entry before retrying. Your draft will stay here.</p>}
+            </> : <p>{canRetryCreate ? "The receipt is still awaiting review. Check your draft before retrying." : "Reload the saved state before retrying. Your draft will stay here."}</p>}
             {canRetryCreate && <button type="button" className={editorButton} disabled={busy} onClick={() => {
               setMustReload(false); setCanRetryCreate(false); setMessage("Check your retained draft, then save again.");
             }}>Check draft and retry</button>}
