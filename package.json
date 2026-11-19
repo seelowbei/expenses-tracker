@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.24.0",
   "scripts": {
+    "dev": "pnpm --parallel --filter web --filter worker dev",
     "test": "pnpm -r test",
     "test:hooks": "node --test \".claude/hooks/*.test.mjs\""
   },
