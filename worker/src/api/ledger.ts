@@ -1,11 +1,11 @@
 import { ledgerDetailResponse } from "./ledger-detail";
 import { readJsonBody } from "./json-body";
-import { and, eq, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AppEnv } from "../app-env";
 import { type LedgerPage } from "../contracts/ledger";
 import { readLedger } from "../db/ledger";
-import { categories } from "../db/schema";
+import { categoryVisible } from "./ledger-category";
+import { ledgerExportResponse } from "./ledger-export";
 import { LedgerDelete, LedgerPatch } from "../contracts/ledger-write";
 import { deleteLedgerEntry } from "../db/ledger-delete";
 import { saveLedgerEntry } from "../db/ledger-write";
@@ -17,11 +17,7 @@ ledgerRoutes.get("/", async (c) => {
   const q = parseLedgerQuery(c.req.query());
   if (!q) return c.json({ error: "invalid_filters" }, 400);
   const { db, user } = c.var;
-  if (q.category) {
-    const visible = await db.select({ id: categories.id }).from(categories)
-      .where(and(eq(categories.id, q.category), or(eq(categories.userId, user.id), isNull(categories.userId)))).get();
-    if (!visible) return c.json({ error: "not_found" }, 404);
-  }
+  if (q.category && !(await categoryVisible(db, user.id, q.category))) return c.json({ error: "not_found" }, 404);
   const [rows, sums] = await readLedger(db, user.id, q);
   const entries = rows.slice(0, q.limit);
   const totals = sums.map(({ total_text, ...rest }) => ({ ...rest, total_minor: Number(total_text) }));
@@ -34,6 +30,9 @@ ledgerRoutes.get("/", async (c) => {
   };
   return c.json(body);
 });
+
+// Registered before "/:id" so "export" is never read as an entry ID.
+ledgerRoutes.get("/export", ledgerExportResponse);
 
 ledgerRoutes.get("/:id", (c) => ledgerDetailResponse(c, c.req.param("id")));
 

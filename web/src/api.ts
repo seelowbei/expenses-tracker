@@ -65,6 +65,19 @@ export function listLedger(filters: LedgerFilters, cursor?: string, signal?: Abo
   return call<LedgerPage>(`/api/ledger?${query}`, { signal });
 }
 
+/** Fetches the CSV for the whole filtered range (not just the loaded page) and returns it with its server-chosen file name. */
+export async function exportLedgerCsv(filters: LedgerFilters): Promise<{ blob: Blob; filename: string }> {
+  const query = new URLSearchParams({ from: filters.from, to: filters.to });
+  if (filters.category) query.set("category", filters.category);
+  const res = await fetch(`/api/ledger/export?${query}`, { credentials: "same-origin" });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new ApiError(res.status, typeof body.error === "string" ? body.error : `http_${res.status}`, body);
+  }
+  const filename = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "ledger.csv";
+  return { blob: await res.blob(), filename };
+}
+
 export const getLedgerEntry = (id: string, signal?: AbortSignal) =>
   call<{ entry: LedgerDetail }>(`/api/ledger/${encodeURIComponent(id)}`, { signal }).then((r) => r.entry);
 

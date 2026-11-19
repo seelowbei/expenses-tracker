@@ -2,10 +2,10 @@ import type { LedgerDetail } from "../../../worker/src/contracts/ledger";
 import { EntryEditor } from "./EntryEditor";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, listCategories, listLedger, type LedgerSummary } from "../api";
+import { ApiError, exportLedgerCsv, listCategories, listLedger, type LedgerSummary } from "../api";
 import { EntryDetail } from "./EntryDetail";
 import { formatMoney, localDate, localMonth, monthLabel, monthRange, presetRange, rangeLabel, shiftMonth, type RangePreset } from "./format";
-import { ChevronIcon, RefreshIcon } from "./icons";
+import { ChevronIcon, DownloadIcon, RefreshIcon } from "./icons";
 import { SelectControl } from "./SelectControl";
 import { summarizeTotals } from "./totals";
 
@@ -30,6 +30,8 @@ export function LedgerView({ account, onReviewed }: { account: string; onReviewe
   const [category, setCategory] = useState("");
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const categories = useQuery({ queryKey: ["categories", account], queryFn: ({ signal }) => listCategories(signal) });
   const filters = { ...range, ...(category ? { category } : {}) };
   const cursor = cursors[cursors.length - 1];
@@ -43,6 +45,22 @@ export function LedgerView({ account, onReviewed }: { account: string; onReviewe
     setPreset(next);
     if (next === "month") { selectMonth(localMonth()); return; }
     if (next !== "custom") { setRange(presetRange(next, localDate())); resetPage(); }
+  };
+  const exportCsv = async () => {
+    setExporting(true); setExportError("");
+    try {
+      const { blob, filename } = await exportLedgerCsv(filters);
+      const url = URL.createObjectURL(blob);
+      const link = Object.assign(document.createElement("a"), { href: url, download: filename });
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : "";
+      setExportError(code === "export_too_large" ? "Too many entries to export at once. Choose a shorter range or one category."
+        : code === "invalid_filters" ? "Choose a valid date range covering no more than 12 calendar months."
+          : code === "amount_out_of_range" ? "An amount is too large to export safely. Try a narrower date range."
+            : "Couldn't export your ledger. Try again.");
+    } finally { setExporting(false); }
   };
   const groups = new Map<string, { name: string; entries: LedgerSummary[] }>();
   for (const e of ledger.data?.entries ?? []) {
@@ -105,8 +123,10 @@ export function LedgerView({ account, onReviewed }: { account: string; onReviewe
             </SelectControl>
           </label>
           <button className="btn btn-icon" aria-label="Refresh ledger" title="Refresh ledger" onClick={() => { resetPage(); void ledger.refetch(); }} disabled={ledger.isFetching}><RefreshIcon /></button>
+          <button className="btn btn-icon" aria-label="Export CSV" title="Export CSV (all entries in this range and category)" onClick={() => void exportCsv()} disabled={exporting}><DownloadIcon /></button>
           </div>
         </div>
+        {exportError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{exportError}</p>}
         {categories.isError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">Couldn't load categories. <button className="underline" onClick={() => void categories.refetch()}>Retry categories</button></p>}
       </div>
 
