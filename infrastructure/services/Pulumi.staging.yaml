@@ -17,4 +17,4 @@ config:
   expense-services:sessionSecret:
     secure: AAABAE+QElCQq+1Q2Nwvr4/tEvNFlQw4Yrnl3KgYE5Ux+/XxgAGyGW20xSf18MoMZPGkPfKXCs/S5XIwJRxAV5kHQAJiWpDRFTi4cA==
   expense-services:allowedEmails:
-    secure: AAABALBfyMEkgpWnqy3w1SuPuqdybsd3WmwGUP8g1VkUN4Os1YxQNt6bF6acWlEnc9tp
+    secure: AAABAEuQFR5H93HU+2aIlSu5pIWh/q6sMuuv1mJX4JspAhcEEtxoKAvVmp5pJd8mIvWb7YiPTrxJuAINWi03ZKpZN+bIr88=
