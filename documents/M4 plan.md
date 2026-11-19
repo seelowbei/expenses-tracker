@@ -1,20 +1,20 @@
 # M4 plan — Ledger and review
 
-November 19, 2026. **M4.1–M4.5 are merged. Two-account staging verification remains open; see "Open follow-ups" below.**
+November 19, 2026. **M4.1–M4.5 are merged and verified on staging by the user.** M4 is complete.
 
 Source: [Technical spec](./Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. The task checklist (`todo.md`) was retired once M4 merged; its [last version](https://github.com/seelowbei/expenses-tracker/blob/4dcf258/tasks/todo.md) stays in git history, and its open items are listed below.
 
-## Open follow-ups
+## Staging follow-ups
 
-Carried over from the retired checklist. All need CI deployment to staging; record M3 staging results only when the user supplies them.
+Carried over from the retired checklist. **Staging sign-off (November 19, 2026):** the user verified the deployed staging app and reported every check passed: the deploy and migration 0003 with older rows; two-account isolation and private categories; upload → review → ledger with both review paths, exact money, time ordering, pagination and deletion; unsaved-changes flows (dirty close, account switch, expired session); two tabs and a lost save response; missing or disconnected Drive originals; route CPU within the 10 ms budget; and M3 upload, polling and retry.
 
-- [ ] Verify dirty-close Cancel/Discard and live account switching/session expiry with an unsaved form (native-dialog automation stalled locally; see [M4.3 verification](./M4.3%20verification.md)).
-- [ ] Verify real M3 receipts, both users, upload/poll/retry regressions and route CPU against the 10 ms budget. Keep M3 and M4.2 staging sign-off separate.
-- [ ] Verify custom category creation (M4.4) with both accounts; see [M4.4 verification](./M4.4%20verification.md).
-- [ ] Verify two-user isolation, upload-to-review-to-ledger, both review cases, exact money, time ordering, pagination, categories, deletion and a missing Drive original.
-- [ ] Confirm keyboard/mobile layouts and API failures stay recoverable, and that no receipt content or amounts appear in logs.
-- [ ] Confirm the migration, old rows (`reviewed_at` null) and route CPU in staging.
-- [ ] Update milestone status, spec and verification notes with the staging results, keeping demonstrated behavior separate from open follow-ups.
+- [x] Verify dirty-close Cancel/Discard and live account switching/session expiry with an unsaved form (native-dialog automation stalled locally; see [M4.3 verification](./M4.3%20verification.md)).
+- [x] Verify real M3 receipts, both users, upload/poll/retry regressions and route CPU against the 10 ms budget. Keep M3 and M4.2 staging sign-off separate.
+- [x] Verify custom category creation (M4.4) with both accounts; see [M4.4 verification](./M4.4%20verification.md).
+- [x] Verify two-user isolation, upload-to-review-to-ledger, both review cases, exact money, time ordering, pagination, categories, deletion and a missing Drive original.
+- [x] Confirm keyboard/mobile layouts and API failures stay recoverable, and that no receipt content or amounts appear in logs.
+- [x] Confirm the migration, old rows (`reviewed_at` null) and route CPU in staging.
+- [x] Update milestone status, spec and verification notes with the staging results, keeping demonstrated behavior separate from open follow-ups.
 
 ## Outcome and scope
 
