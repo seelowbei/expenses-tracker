@@ -35,6 +35,39 @@ describe("confirmed review cache update", () => {
     expect(client.getQueryData(["receipts", account])).toEqual([{ ...receipt, status: "done" }]);
     client.clear();
   });
+  it("removes saved receipts from every review page and cancels stale detail/page responses", async () => {
+    const client = createAppQueryClient();
+    client.setQueryData(["me"], { email: account });
+    const page = { receipts: [receipt], nextCursor: "next" };
+    const detail = { receipt, entryId: null, draft: { merchant: "Draft" } };
+    client.setQueryData(["review", account, "first"], page);
+    client.setQueryData(["review", account, "second"], page);
+    client.setQueryData(["review", "bob@example.com", "first"], page);
+    client.setQueryData(["receipt-detail", account, "r"], detail);
+    let finishPage!: (value: typeof page) => void;
+    let finishDetail!: (value: typeof detail) => void;
+    const reads = [
+      client.fetchQuery({ queryKey: ["review", account, "first"], queryFn: () => new Promise<typeof page>(resolve => { finishPage = resolve; }) }),
+      client.fetchQuery({ queryKey: ["receipt-detail", account, "r"], queryFn: () => new Promise<typeof detail>(resolve => { finishDetail = resolve; }) }),
+    ];
+    await syncReviewedEntry(client, account, entry);
+    finishPage(page); finishDetail(detail); await Promise.allSettled(reads);
+    expect(client.getQueryData(["review", account, "first"])).toEqual({ ...page, receipts: [] });
+    expect(client.getQueryData(["review", account, "second"])).toEqual({ ...page, receipts: [] });
+    expect(client.getQueryData(["review", "bob@example.com", "first"])).toEqual(page);
+    expect(client.getQueryData(["receipt-detail", account, "r"])).toMatchObject({ entryId: "e", draft: null, receipt: { status: "done" } });
+    client.clear();
+  });
+  it("does not publish a late save after switching accounts", async () => {
+    const client = createAppQueryClient();
+    client.setQueryData(["me"], { email: account });
+    const saving = syncReviewedEntry(client, account, entry);
+    client.setQueryData(["me"], { email: "bob@example.com" });
+    expect(await saving).toBe(false);
+    expect(client.getQueryData(["ledger-detail", account, "e"])).toBeUndefined();
+    expect(client.getQueryData(["ledger-detail", "bob@example.com", "e"])).toBeUndefined();
+    client.clear();
+  });
   it("does not recreate private data after sign-out", async () => {
     const client = createAppQueryClient();
     client.setQueryData(["me"], { email: account });

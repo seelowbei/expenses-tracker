@@ -1,6 +1,6 @@
 # M4 plan — Ledger and review
 
-November 16, 2026. **M4.1 merged. M4.2 implemented and locally verified November 17, 2026; PR review and staging checks remain. M4.3–M4.5 remain planned.**
+November 18, 2026. **M4.1 and M4.2 are merged. M4.3 is implemented and locally verified on `codex/m4-3`; PR review and staging checks remain. M4.4–M4.5 remain planned.**
 
 Source: [Technical spec](../documents/Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. Implementation checklist: [todo.md](todo.md).
 
@@ -17,13 +17,13 @@ M4 does not include manual expense creation without a receipt, category rename/d
 - `worker/src/db/schema.ts` already has ledger entries, categories, receipt review reasons and raw extraction. Ledger entries have nullable transaction time, notes and receipt association; a unique receipt ID prevents duplicate entries.
 - `worker/src/db/categories.ts` already returns system defaults plus the signed-in user's categories. Custom categories take precedence over system categories with the same slug when resolving AI output.
 - `worker/src/pipeline/process.ts` inserts valid AI results, including results requiring review. Invalid output has no ledger row. The consumer claims only queued/processing receipts; terminal receipts are ignored, and writes are guarded by attempt number.
-- Category listing, bounded ledger list/detail and existing-entry PATCH are implemented alongside `/api/me` and the receipt routes. Receipt listing still returns the newest 50 and omits raw extraction and the associated ledger entry; the complete review backlog remains M4.3.
+- Category listing, bounded ledger list/detail and existing-entry PATCH are implemented alongside `/api/me` and the receipt routes. Receipt listing now supports bounded cursor pagination; detail exposes the owned entry ID or a validated draft, and receipt review creates missing entries atomically.
 - `web/src/App.tsx` contains sign-in, uploads, recent receipts and bounded status polling. `web/src/api.ts` holds typed calls; `web/src/ledger/` provides browsing and an existing-entry editor. Pure form/money logic is tested by the existing Worker test runner; browser verification uses synthetic data.
 - Workerd tests already supply authenticated users, fake Google/AI clients and D1 interleaving helpers. Reuse them for isolation and concurrent-write cases.
 
 ## Decisions and proposals
 
-Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The M4.2 existing-entry write proposals were adopted with the November 17 implementation request and recorded in the technical spec. Remaining M4.3–M4.5 details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
+Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The M4.2 existing-entry write proposals were adopted with the November 17 implementation request and recorded in the technical spec. The M4.3 review contracts were adopted with the November 18 implementation request and recorded in the spec. Remaining M4.4–M4.5 details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
 
 ### 1. Complete the review API
 
@@ -98,6 +98,57 @@ Keep the existing upload and status experience. Add a ledger section with month/
 Extract new UI components from `App.tsx` as the slices require; avoid an unrelated application rewrite or router dependency. Use labelled form controls, visible keyboard focus, focus restoration when closing the editor, clear field errors and a dirty-form close confirmation. Include loading, empty, retryable error and stale-conflict states in light and dark themes.
 
 Keep the existing three-second receipt polling and 15-minute cap. When an observed receipt becomes `done`/`needs_review`, invalidate ledger summaries and the review backlog; opening/refocusing the ledger also fetches current data. Edits, review saves and deletes invalidate both the prior and new filter scopes, totals, receipt detail and review queue. Category creation invalidates category queries. Ordinary listing does not call Workers AI or Drive.
+
+## M4.3 execution plan — November 18, 2026
+
+Branch: `codex/m4-3`, created from `origin/main`. Implementation and local verification are complete; PR review and staging remain. This implements Tasks 6 and 9, preserving M4.4/M4.5 scope and prior staging follow-ups. Contracts were adopted in the technical spec before dependent code. Evidence and verification limits: [M4.3 verification](../documents/M4.3%20verification.md).
+
+**Outcome:** every pending receipt is reachable, including missing-date/invalid-output receipts. A user can review an existing entry or create a missing entry exactly once, then see the inbox and currency-separated totals update without reloading.
+
+### Adopted contracts
+
+| Operation | Behavior |
+| --- | --- |
+| `GET /api/receipts?status=needs_review&cursor=&limit=` | Preserve receipt fields; add `nextCursor`. Default 50, cap 100; strict positive integer limits. Order by `created_at DESC, id DESC`; fetch one extra row for pagination. No transaction-date dependency. |
+| Existing receipt listing | Keep absent/comma-separated status behavior and the default newest 50. Pagination is additive. Bounded, validated cursors contain the ordering position and normalized status filter; reject filter mismatches. Preserve `invalid_status`; use `invalid_filters` for bad pagination. |
+| `GET /api/receipts/:id` | Return `{ receipt, entryId, draft }`. Receipt metadata retains camelCase; `entryId` is owned or null. `draft` contains partial human fields using ledger names, only for eligible missing-entry review; otherwise null. Never return raw extraction. |
+| `POST /api/receipts/:id/review` | Strict complete `LedgerFields` body, capped at 32 KiB streamed bytes. Return `201 { entry }` using `LedgerDetail`. No client-supplied version, confidence, source or audit fields. Existing entries use PATCH. |
+
+All reads/joins use the session user; categories must be system defaults or owned. Unknown/foreign resources return `404 not_found`; writes retain Origin checks. Reuse `invalid_json`, `invalid_body` (field paths only) and `body_too_large` conventions.
+
+**Safe drafts:** parse stored extraction only on detail requests, with a 64 KiB input bound. Null, malformed, oversized or non-object JSON yields an empty draft so manual completion remains possible. Validate each recognized field independently against human-edit constraints; omit invalid/unknown fields. Impossible dates, blank merchants, unsupported currencies and unknown category slugs stay blank. Resolve category slugs through the existing visible-category resolver, preserving custom-category precedence. Preserve explicit optional nulls. Never silently fill missing required values with today's date, zero, default currency or `Other`.
+
+Extraction amounts are decimal numbers; human saves use minor units. Convert only with a supported extracted currency and exact safe conversion. Omit over-precision/unsafe values instead of rounding; test exponent notation and zero-/three-decimal currencies. Without valid currency, omit monetary prefill. Validate a line-item collection as a whole (maximum 50, bounded descriptions, safe signed amounts); omit a malformed collection rather than silently dropping charges. Do not reuse the pipeline's rounding conversion for this path. Keep new draft logic outside `src/agent/`.
+
+Malformed stored review reasons must also fail safely in receipt DTO conversion: return absent warnings while retaining the invalid-output status explanation and stored evidence. Lists select metadata only, never raw extraction/line items. Ordinary list/detail/save routes call neither AI nor Drive; the optional existing preview alone fetches Drive.
+
+**Atomic creation:** require the owned receipt to still be `needs_review`, have `error='invalid_output'`, and have no entry at write time. Use a conditional insert and receipt completion in one D1 batch; gate completion on that insert's success. Retain receipt uniqueness as the final guard and check category visibility in the write predicate. Prove this with workerd tests before UI integration, reusing the existing guarded insert/batch patterns where possible.
+
+Generate ID/timestamps server-side; write `source='ai_edited'` and `reviewed_at`/`created_at`/`updated_at`. Store null confidence because there was no validated full extraction. Preserve raw extraction, original reasons, usage and Drive metadata; clear active error/retry time and set `done`. Both statements roll back on failure. No migration is expected.
+
+An existing owned entry returns `409 review_already_saved` with `entryId`; never overwrite it. Other ineligible states, including a completed receipt whose entry is absent, return `409 not_reviewable`. Scope conflict lookups by user. Test status/category races at the batch boundary, simultaneous submissions, lost responses, deletion-shaped terminal fixtures and delayed queue delivery. M4.3 does not implement deletion.
+
+### UI and recovery
+
+Add a review section above the ledger, independent of month/category filters. Each receipt appears once per page, labelled with upload date/status and Drive link; load expense details on opening. Provide Previous/Next and Refresh. Reset to the first page after a confirmed save. All queries are account-scoped; cancel pending review/detail reads before publishing saved state so stale results cannot restore a pending item.
+
+Reuse `EntryFields`, `ReceiptPreview` and the existing dialog layout. Give `EntryEditor` explicit existing-entry and missing-entry inputs instead of fabricating `LedgerDetail` for a draft. Extract only the shared form serialization needed by both modes. Preserve PATCH concurrency, exact money inputs, currency reconfirmation, original warnings, mobile panes and dirty-close protection. Selecting currency for a blank draft requires checking entered amounts, without reinterpreting them.
+
+On duplicate/uncertain save, retain the form and reload receipt detail. If another save won, fetch its entry and show the existing comparison flow; a later overwrite requires an explicit version-guarded PATCH, never an automatic POST retry. If still eligible, retry requires a successful reload and explicit user action. If no longer eligible, retain the draft with an explanation and disable creation. Preview failure never blocks editing. Clear forms/caches on account change or session expiry.
+
+Extend receipt-completion invalidation to review/detail queries while preserving the three-second polling interval and 15-minute cap. Confirmed saves update Recent receipts immediately, remove the pending item and invalidate all ledger filter/totals scopes. Empty pages caused by concurrent reviews offer a first-page refresh. Cursors work even when the anchor receipt leaves pending review; refresh discovers newly pending receipts. No snapshot-consistency guarantee is proposed for a changing inbox.
+
+### Increment order
+
+The checklist in `todo.md` defines slices **4.3-0 through 4.3-8**: contracts → safe detail → atomic creation → pagination → shared form → editor → cache synchronization → inbox → final verification. API prerequisites deliberately come first because draft safety and concurrent creation are the highest risks. Every commit remains compilable and testable through its API or existing UI; expose new review actions only when the save path works.
+
+For each implementation slice: implement one logical change, run focused tests and affected typechecks/build, inspect the result, then commit before expanding. Split again if more than roughly five substantive files or a large unverified change is needed. Do not repeat successful checks on unchanged code. Keep one M4.3 PR; intermediate commits are not separately merged/deployed, so no feature flag or new binding is needed. Work sequentially; no parallel agents are needed.
+
+At the API checkpoint verify isolation, compatibility, conditional creation and rollback. At the UI checkpoint verify both review paths using synthetic data, over 50 receipts and missing-date drafts. Finish repository tests, worker/web/infrastructure typechecks, SPA build, Worker bundle and Chrome checks. Tests use fake AI/Drive clients. Record staging CPU verification against the 10 ms budget separately; local tests cannot establish production CPU. No agent changes are planned; run the receipt eval if that scope changes.
+
+Rollback is a code revert: no destructive/down migration, infrastructure change or Drive mutation. Already-created entries remain valid ledger data. Custom categories, deletion UI/API, manual expenses, extraction changes and M5 stay out of scope.
+
+**Contract adoption:** DTOs, cursor behavior, draft omission and save/conflict semantics were recorded in slice 4.3-0 before implementation. Existing M3/M4.2 staging follow-ups remain separate; this plan does not claim them complete.
 
 ## Recommended PR split
 

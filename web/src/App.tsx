@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, getMe, listReceipts, logout, retryReceipt, uploadReceipt, type Me, type Receipt } from "./api";
 import { prepareFile, PrepareError } from "./prepare";
+import { ReviewInbox } from "./ledger/ReviewInbox";
 import { LedgerView } from "./ledger/LedgerView";
 import { clearSession } from "./query-client";
 
@@ -90,6 +91,8 @@ type UploadState = { name: string; state: "preparing" | "uploading" | "done" | "
 function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void }) {
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
+  const [reviewRevision, setReviewRevision] = useState(0);
+  const reviewed = () => setReviewRevision(value => value + 1);
   const [uploads, setUploads] = useState<UploadState[]>([]);
   // Poll every 3 s while a receipt is being worked on (spec "API"). Stops when none is, and after
   // POLL_CAP_MS without any change, so a receipt stuck by a crash can't poll all day; an upload restarts it.
@@ -111,6 +114,8 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
     if (completed !== undefined) {
       void qc.invalidateQueries({ queryKey: ["ledger", me.email] });
       void qc.invalidateQueries({ queryKey: ["ledger-detail", me.email] });
+      void qc.invalidateQueries({ queryKey: ["review", me.email] });
+      void qc.invalidateQueries({ queryKey: ["receipt-detail", me.email] });
     }
   }, [completed, qc, me.email]);
 
@@ -181,7 +186,8 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
         )}
       </section>
 
-      <LedgerView account={me.email} />
+      <ReviewInbox account={me.email} revision={reviewRevision} onSaved={reviewed} />
+      <LedgerView account={me.email} onReviewed={reviewed} />
 
       <section>
         <h2 className="mb-3 font-medium">Recent receipts</h2>
