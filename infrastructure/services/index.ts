@@ -86,7 +86,6 @@ const worker = new cloudflare.WorkersScript("worker", {
     { type: "secret_text", name: "GOOGLE_CLIENT_SECRET", text: secret("googleClientSecret") },
     { type: "secret_text", name: "TOKEN_ENC_KEY", text: secret("tokenEncKey") },
     { type: "secret_text", name: "SESSION_SECRET", text: secret("sessionSecret") },
-    { type: "secret_text", name: "ALLOWED_EMAILS", text: secret("allowedEmails") },
   ],
   observability: { enabled: true },
 });

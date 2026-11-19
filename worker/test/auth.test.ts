@@ -93,15 +93,6 @@ describe("GET /auth/google/callback", () => {
     expect((await validateSession(db(), cookieValue(session)))?.user.id).toBe(user!.id);
   });
 
-  it("rejects accounts that are not on the allow-list without storing anything", async () => {
-    const sub = `sub-${crypto.randomUUID()}`;
-    const google = fakeGoogle({ [TOKEN_URL]: () => tokenResponse({ sub, email: "mallory@example.com", refreshToken: "rt" }) });
-    const { res } = await signIn(google);
-    expect(res.headers.get("Location")).toBe("/?error=not_allowed");
-    expect(setCookies(res).has(SESSION_COOKIE)).toBe(false);
-    expect(await db().select().from(users).where(eq(users.googleSub, sub)).get()).toBeUndefined();
-  });
-
   it("rejects unverified emails and a missing Drive scope", async () => {
     const google = fakeGoogle({ [TOKEN_URL]: () => tokenResponse({ sub: "s1", email: "alice@example.com", refreshToken: "rt", emailVerified: false }) });
     expect((await signIn(google)).res.headers.get("Location")).toBe("/?error=id_token_claims");
@@ -222,16 +213,6 @@ describe("GET /api/me", () => {
       driveFolderLink: "https://drive.google.com/drive/folders/f1",
     });
     expect(id).toBeTruthy();
-  });
-
-  it("ends the sessions of an account removed from ALLOWED_EMAILS", async () => {
-    const { cookie, token } = await seedUser({ email: "carol@example.com" });
-    const { request } = makeApp();
-    const res = await request("/api/me", { headers: { Cookie: cookie } });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "not_allowed" });
-    expect(setCookies(res).get(SESSION_COOKIE)).toMatch(/Max-Age=0/);
-    expect(await validateSession(db(), token)).toBeNull();
   });
 
   it("is 401 without a session", async () => {

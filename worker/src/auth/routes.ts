@@ -9,7 +9,6 @@ import { users } from "../db/schema";
 import { cacheAccessToken, ensureFolder, googleConfig } from "../drive/access";
 import { DriveError, driveApi } from "../drive/client";
 import { log } from "../lib/log";
-import { isAllowedEmail } from "./allowlist";
 import { encryptToken, signValue, verifySignedValue } from "./crypto";
 import { authorizationUrl, DRIVE_FILE_SCOPE, exchangeCode, GoogleAuthError, newAuthRequest } from "./google";
 import { checkOrigin } from "./middleware";
@@ -70,7 +69,6 @@ authRoutes.get("/google/callback", async (c) => {
   }
 
   const email = result.claims.email.toLowerCase();
-  if (!isAllowedEmail(c.env.ALLOWED_EMAILS, email)) return fail("not_allowed");
   // Google's granular consent lets the user untick Drive access.
   if (!result.grantedScopes.includes(DRIVE_FILE_SCOPE)) return fail("drive_scope_missing");
 

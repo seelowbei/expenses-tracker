@@ -81,7 +81,7 @@ Run typecheck and the relevant tests before calling a change done.
 - OAuth scopes are exactly `openid email profile https://www.googleapis.com/auth/drive.file`. Never request full `drive`.
 - Refresh tokens: AES-GCM, random 12-byte IV, stored as `v1:<iv>:<ciphertext>`, key `TOKEN_ENC_KEY`. Access tokens cached in memory only.
 - Session cookie `__Host-session`: random 32-byte token, `HttpOnly; Secure; SameSite=Lax; Path=/`, no Domain; only its SHA-256 is stored. Keep the `__Host-` prefix on auth cookies.
-- Callback rejects emails not in `ALLOWED_EMAILS`.
+- Sign-in is limited by the Google OAuth consent screen staying in Testing mode (only test users can authorize). There is no app-side allow-list; don't add one or suggest publishing the consent screen without asking.
 - Uploads: allow-list `image/jpeg`, `image/png`, `application/pdf` with magic-byte checks; 10 MB max; server-generated file names.
 - `invalid_grant` / Drive 401 → `drive_status='disconnected'`, delete the user's sessions, keep ledger data.
 - **Drive is write-once:** only create the folder and upload new files. Never delete, trash, overwrite or move Drive files (no `DELETE`/`PATCH`/`PUT` to Drive, no `trashed`). `drive.file` would allow it, so `test/drive-no-delete.test.ts` guards it. Deleting a ledger entry keeps the Drive file.

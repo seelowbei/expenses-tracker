@@ -31,7 +31,7 @@ A web app where users sign in with Google, upload a receipt (image or PDF), and 
 
 - Target hosting cost of $0/month; $5/month Workers Paid is the first step up
 - No servers or containers: Workers, D1, Queues and Workers AI only
-- Google OAuth limited to non-sensitive scopes, so no security assessment is needed. Personal use: two users, enforced by an email allow-list
+- Google OAuth limited to non-sensitive scopes, so no security assessment is needed. Personal use: two users, enforced by keeping the OAuth consent screen in Testing mode with only them as test users
 
 ## Architecture
 
@@ -393,8 +393,8 @@ The two highest-value secrets are the users' Google refresh tokens. They are enc
 - **Account deletion:** `DELETE /api/me` (v1.1) removes D1 rows and revokes the Google token; Drive files stay with the user.
 - **Dev routes:** `/api/dev/*` (the M1 eval) has no session check, so it answers only when `DEV_ROUTES=true` (local wrangler vars, never Pulumi) and `APP_ORIGIN` is a loopback origin.
 - **ID token signature:** not verified. The ID token comes straight from Google's token endpoint over TLS in the code exchange, which OIDC Core 3.1.3.7 allows; `iss`, `aud`, `exp` and `iat` are still checked. Accepted.
-- **Rate limiting:** none on `/auth/*` or the API. Every `/api/*` route needs a session from an allow-listed account, and `/auth/google` only sets a short-lived state cookie. A rate-limit binding is outside the products this design allows (Workers, D1, Queues, Workers AI, static assets); Cloudflare's DDoS protection still applies. Accepted; revisit if the app opens beyond the two users.
-- **Google verification:** publish the consent screen as In production. With only non-sensitive scopes no verification is required, and it avoids Testing mode's 7-day refresh-token expiry. Because the app is then open to any Google account, the callback rejects any email not in the ALLOWED\_EMAILS var (the two users).
+- **Rate limiting:** none on `/auth/*` or the API. Every `/api/*` route needs a session from a Google test user, and `/auth/google` only sets a short-lived state cookie. A rate-limit binding is outside the products this design allows (Workers, D1, Queues, Workers AI, static assets); Cloudflare's DDoS protection still applies. Accepted; revisit if the app opens beyond the two users.
+- **Who can sign in:** the consent screen stays in Testing mode, and Google lets only the project's test users authorize the app; everyone else is stopped on Google's own screen before the callback. Adding or removing a user is a Google Cloud Console change, with no deploy. The app has no allow-list of its own (decided Nov 19, 2026; it replaced the `ALLOWED_EMAILS` secret). Consequences, accepted: publishing the consent screen as In production would open sign-in to any Google account, so do not publish without first adding an app-side check; removing a test user stops new sign-ins but does not end existing sessions, so also delete that user's `sessions` rows; Testing mode expires refresh tokens after 7 days, so Drive disconnects weekly and the user reconnects.
 
 ## Limits, cost & failure handling
 
@@ -502,7 +502,7 @@ Wrangler is no longer the deployment source. It runs local dev, bundles the Work
 
 **Secrets**
 
-- Deployed (per stack, `pulumi config set --secret <key> -s <stack>` in `infrastructure/services`): `googleClientId`, `googleClientSecret`, `tokenEncKey` (32 random bytes, base64: `openssl rand -base64 32`), `sessionSecret` (signs the OAuth state cookie), `allowedEmails` (comma-separated allow-list). They become the Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENC_KEY`, `SESSION_SECRET` and `ALLOWED_EMAILS`.
+- Deployed (per stack, `pulumi config set --secret <key> -s <stack>` in `infrastructure/services`): `googleClientId`, `googleClientSecret`, `tokenEncKey` (32 random bytes, base64: `openssl rand -base64 32`) and `sessionSecret` (signs the OAuth state cookie). They become the Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENC_KEY` and `SESSION_SECRET`.
 - Non-secret per stack: `appOrigin`, optional `customDomain` + `zoneId` (production).
 - Local: `worker/.dev.vars` (git-ignored) with the same names in upper case.
 
@@ -511,7 +511,7 @@ Wrangler is no longer the deployment source. It runs local dev, bundles the Work
 1. Pulumi: `pulumi login` (Pulumi Cloud), then `pulumi stack init staging` and `pulumi stack init production` in both `infrastructure/foundation` and `infrastructure/services`.
 2. Foundation: `pulumi config set accountId <id>` per stack, then `pulumi up -s staging` and `pulumi up -s production`. Copy each `d1DatabaseId` output into the matching `env` block of `wrangler.jsonc`.
 3. Workers AI: send one request with the prompt `agree` to `@cf/meta/llama-3.2-11b-vision-instruct` to accept Meta's license for the account.
-4. Google Cloud: create a project, enable the Drive API, and configure the OAuth consent screen (External; add both accounts as test users while building, then Publish app to In production before daily use). Use scopes `openid`, `email`, `profile`, `drive.file`.
+4. Google Cloud: create a project, enable the Drive API, and configure the OAuth consent screen (External; add both accounts as test users and leave it in Testing mode, since the test-user list is the access control). Use scopes `openid`, `email`, `profile`, `drive.file`.
 5. Create two OAuth Web clients (dev, prod) with redirect URIs `http://localhost:8787/auth/google/callback`, `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` and the production origin's `/auth/google/callback`.
 6. Services: set `appOrigin` and the secrets for each stack.
 7. GitHub repo secrets: `CLOUDFLARE_API_TOKEN` (Account: Workers Scripts, D1, Queues edit; Zone: Workers Routes edit if a custom domain is used), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`.
@@ -570,7 +570,7 @@ The biggest risk is extraction accuracy from the free open-source vision model. 
 | Vision model accuracy too low on local receipts | Users fix most entries by hand | 10-receipt regression eval; per-field edit rate from user corrections; `needs_review` flow; optional external model via AI Gateway |
 | Neuron cost per receipt higher than estimated | Free cap at fewer than 100 receipts/day | Measure in M1; track daily from `ai_usage`; cut repair calls with a stricter prompt; resize images harder; upgrade to Paid ($5) |
 | Free-plan CPU (10 ms) exceeded on upload | Error 1101 / failed uploads | Client-side resize; resumable upload straight to Drive for large files |
-| OAuth app left in Testing mode | Max 100 test users; 7-day refresh-token expiry in Testing mode | Publish as In production (non-sensitive scopes need no verification); email allow-list limits sign-in to the two users |
+| OAuth app kept in Testing mode (it is the access control) | Max 100 test users; 7-day refresh-token expiry, so a weekly Drive reconnect | Accepted for two users. Publishing to In production removes the access control, so it first needs an app-side allow-list |
 | User revokes Drive access or deletes files | Broken receipt links | D1 is source of truth; reconnect prompt; link marked unavailable |
 | Drive API Terms on storing app content in Drive | Policy issue at verification | Files are uploaded by the user into their own Drive; confirm wording before submitting |
 
@@ -588,4 +588,4 @@ The biggest risk is extraction accuracy from the free open-source vision model. 
 2. **M2 — Auth + Drive:** Google sign-in, encrypted refresh tokens, folder creation, upload to Drive.
 3. **M3 — Pipeline:** Queue consumer, validation, ledger writes (including `txn_time`), `ai_usage` rows for every AI call, retries/DLQ, invalid-output and AI-quota parking (`scheduled` cron), status polling.
 4. **M4 — Ledger UI:** category/month views (entries ordered by date and time), review and edit including time, categories, delete.
-5. **M5 — Hardening & prod:** CI/CD, prod env and domain, limits banners, privacy policy, OAuth consent screen published as In production, allow-list set.
+5. **M5 — Hardening & prod:** CI/CD, prod env and domain, limits banners, privacy policy, OAuth consent screen kept in Testing mode with both accounts as test users.

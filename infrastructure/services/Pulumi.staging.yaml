@@ -5,7 +5,6 @@ config:
   #   expense-services:googleClientSecret  --secret
   #   expense-services:tokenEncKey         --secret  (openssl rand -base64 32)
   #   expense-services:sessionSecret       --secret
-  #   expense-services:allowedEmails       --secret  (comma-separated)
   expense-services:defaultCurrency: SGD
   expense-services:appOrigin: https://expense-tracker-staging.seelowbei.workers.dev
   expense-services:googleClientId:
@@ -16,5 +15,3 @@ config:
     secure: AAABANW6YNA/j4jRRqK6nGf3b9WcyPKmSnGrrhjtlJj6VuzMgGQ7YwWofBVf1rDtn9PsdjNERJ/ocRpUCXh9SA1UG12vMZzXD7oO2Q==
   expense-services:sessionSecret:
     secure: AAABAE+QElCQq+1Q2Nwvr4/tEvNFlQw4Yrnl3KgYE5Ux+/XxgAGyGW20xSf18MoMZPGkPfKXCs/S5XIwJRxAV5kHQAJiWpDRFTi4cA==
-  expense-services:allowedEmails:
-    secure: AAABALBfyMEkgpWnqy3w1SuPuqdybsd3WmwGUP8g1VkUN4Os1YxQNt6bF6acWlEnc9tp
