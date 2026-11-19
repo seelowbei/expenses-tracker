@@ -230,6 +230,7 @@ const FAILURE_DETAIL: Record<string, string> = {
   unsupported_scanned_pdf: "Scanned PDF: upload a photo or screenshot instead",
   pdf_conversion_failed: "Couldn't read this PDF",
   drive_file_missing: "The file was removed from Drive: upload it again",
+  file_too_large: "The file in Drive is now over 10 MB",
   drive_disconnected: "Google Drive was disconnected",
   processing_timeout: "Took too long to read",
 };

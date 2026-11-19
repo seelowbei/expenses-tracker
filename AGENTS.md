@@ -80,7 +80,7 @@ Run typecheck and the relevant tests before calling a change done.
 - State-changing `/api/*` routes check `Origin` against `APP_ORIGIN`.
 - OAuth scopes are exactly `openid email profile https://www.googleapis.com/auth/drive.file`. Never request full `drive`.
 - Refresh tokens: AES-GCM, random 12-byte IV, stored as `v1:<iv>:<ciphertext>`, key `TOKEN_ENC_KEY`. Access tokens cached in memory only.
-- Session cookie: random 32-byte token, `HttpOnly; Secure; SameSite=Lax`; only its SHA-256 is stored.
+- Session cookie `__Host-session`: random 32-byte token, `HttpOnly; Secure; SameSite=Lax; Path=/`, no Domain; only its SHA-256 is stored. Keep the `__Host-` prefix on auth cookies.
 - Callback rejects emails not in `ALLOWED_EMAILS`.
 - Uploads: allow-list `image/jpeg`, `image/png`, `application/pdf` with magic-byte checks; 10 MB max; server-generated file names.
 - `invalid_grant` / Drive 401 → `drive_status='disconnected'`, delete the user's sessions, keep ledger data.

@@ -25,6 +25,11 @@ function classify(status: number): DriveError["kind"] {
   return "other";
 }
 
+/** The Drive file is larger than the caller's limit (e.g. the user replaced it with a bigger version). */
+export class DriveFileTooLargeError extends Error {
+  readonly code = "file_too_large";
+}
+
 async function ensureOk(res: Response): Promise<Response> {
   if (res.ok) return res;
   await res.body?.cancel();
@@ -34,8 +39,11 @@ async function ensureOk(res: Response): Promise<Response> {
 export interface DriveApi {
   createFolder(name?: string): Promise<string>;
   uploadMultipart(file: { name: string; mimeType: string; parentId: string; body: Blob }): Promise<{ id: string; webViewLink: string }>;
-  /** Read-only `files.get?alt=media`. 404 when the user deleted the file (or it isn't ours). */
-  downloadFile(fileId: string): Promise<Uint8Array>;
+  /**
+   * Read-only `files.get?alt=media`, buffered. 404 when the user deleted the file (or it isn't ours).
+   * Throws DriveFileTooLargeError past `maxBytes`, checked on Content-Length and on the streamed bytes.
+   */
+  downloadFile(fileId: string, maxBytes: number): Promise<Uint8Array>;
   /** Original response body for streaming previews; caller owns consuming/cancelling it. */
   openFile(fileId: string): Promise<Response>;
 }
@@ -77,9 +85,34 @@ export function driveApi(accessToken: string, fetcher: Fetcher): DriveApi {
     },
 
     openFile,
-    async downloadFile(fileId) {
+    async downloadFile(fileId, maxBytes) {
       const res = await openFile(fileId);
-      return new Uint8Array(await res.arrayBuffer());
+      if (Number(res.headers.get("Content-Length")) > maxBytes) {
+        await res.body?.cancel();
+        throw new DriveFileTooLargeError();
+      }
+      if (!res.body) return new Uint8Array();
+      // Count streamed bytes too: Content-Length may be absent.
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          throw new DriveFileTooLargeError();
+        }
+        chunks.push(value);
+      }
+      const out = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return out;
     },
   };
 }

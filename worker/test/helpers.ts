@@ -2,7 +2,7 @@
 import { env } from "cloudflare:workers";
 import type { Fetcher } from "../src/app-env";
 import { encryptToken } from "../src/auth/crypto";
-import { createSession } from "../src/auth/session";
+import { createSession, SESSION_COOKIE } from "../src/auth/session";
 import { getDb, nowIso } from "../src/db/client";
 import { users } from "../src/db/schema";
 import type { Bindings } from "../src/env";
@@ -157,7 +157,7 @@ export async function seedUser(opts: { email?: string; refreshToken?: string | n
       createdAt: nowIso(),
     });
   const { token } = await createSession(db(), id);
-  return { id, token, cookie: `session=${token}` };
+  return { id, token, cookie: `${SESSION_COOKIE}=${token}` };
 }
 
 /** Parses `Set-Cookie` headers into name -> raw cookie string. */

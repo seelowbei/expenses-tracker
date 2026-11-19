@@ -6,7 +6,10 @@ import type { Db } from "../db/client";
 import { sessions, users, type User } from "../db/schema";
 import { randomBytes, sha256Hex, toBase64Url } from "../lib/encoding";
 
-export const SESSION_COOKIE = "session";
+/** `__Host-`: browsers only accept it Secure, Path=/ and without Domain, so no sibling subdomain can set or shadow it. */
+export const SESSION_COOKIE = "__Host-session";
+/** Name before the prefix. Cleared on sign-out; never read, so signing in again is required once. */
+const LEGACY_SESSION_COOKIE = "session";
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const SESSION_TTL_MS = 30 * DAY_MS;
 /** Sliding renewal only when less than this remains, so ordinary requests do no D1 write. */
@@ -70,4 +73,7 @@ export function readSessionCookie(c: Context): string | undefined {
 
 export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true, httpOnly: true, sameSite: "Lax" });
+  if (getCookie(c, LEGACY_SESSION_COOKIE) !== undefined) {
+    deleteCookie(c, LEGACY_SESSION_COOKIE, { path: "/", secure: true, httpOnly: true, sameSite: "Lax" });
+  }
 }

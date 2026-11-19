@@ -9,7 +9,8 @@ import type { Db } from "../db/client";
 import { aiUsage, ledgerEntries, receipts, users, type Receipt } from "../db/schema";
 import { usageRows } from "../db/usage";
 import { DriveDisconnectedError, withDrive } from "../drive/access";
-import { DriveError } from "../drive/client";
+import { DriveError, DriveFileTooLargeError } from "../drive/client";
+import { MAX_UPLOAD_BYTES } from "../lib/sniff";
 import type { Bindings } from "../env";
 import { log } from "../lib/log";
 import { ReceiptMessage } from "./message";
@@ -35,6 +36,7 @@ export type PipelineError =
   | "pdf_conversion_failed"
   | "drive_disconnected"
   | "drive_file_missing"
+  | "file_too_large"
   | "drive_unavailable"
   | "drive_error"
   | "internal_error"
@@ -118,10 +120,12 @@ export async function processReceipt(deps: PipelineDeps, body: unknown, delivery
   // 1. The file, from the user's Drive.
   let bytes: Uint8Array;
   try {
-    bytes = await withDrive(deps.env, deps.app, db, user, (drive) => drive.downloadFile(receipt.driveFileId!));
+    bytes = await withDrive(deps.env, deps.app, db, user, (drive) => drive.downloadFile(receipt.driveFileId!, MAX_UPLOAD_BYTES));
   } catch (e) {
     if (e instanceof DriveDisconnectedError) return fail("drive_disconnected");
     if (e instanceof DriveError && e.kind === "not_found") return fail("drive_file_missing");
+    // The Drive file grew past the upload limit (replaced in Drive). Buffering it could exhaust isolate memory.
+    if (e instanceof DriveFileTooLargeError) return fail("file_too_large");
     if (e instanceof DriveError) return transient(e.kind === "unavailable" ? "drive_unavailable" : "drive_error");
     log("receipt_download_error", { receiptId: receipt.id, name: (e as Error).name });
     return transient("internal_error");

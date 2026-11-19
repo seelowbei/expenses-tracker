@@ -15,7 +15,8 @@ import { authorizationUrl, DRIVE_FILE_SCOPE, exchangeCode, GoogleAuthError, newA
 import { checkOrigin } from "./middleware";
 import { clearSessionCookie, createSession, deleteUserSessions, readSessionCookie, setSessionCookie, validateSession } from "./session";
 
-const STATE_COOKIE = "oauth_state";
+// `__Host-` requires Path=/ (see SESSION_COOKIE).
+export const STATE_COOKIE = "__Host-oauth_state";
 const STATE_TTL_SEC = 600;
 
 const StatePayload = z.object({
@@ -35,7 +36,7 @@ authRoutes.get("/google", async (c) => {
     httpOnly: true,
     secure: true,
     sameSite: "Lax", // must survive the top-level redirect back from Google
-    path: "/auth",
+    path: "/",
     maxAge: STATE_TTL_SEC,
   });
   const url = await authorizationUrl(googleConfig(c.env, c.var.deps), { ...req, consent });
@@ -49,7 +50,7 @@ authRoutes.get("/google/callback", async (c) => {
   };
 
   const signed = getCookie(c, STATE_COOKIE);
-  deleteCookie(c, STATE_COOKIE, { path: "/auth", secure: true, httpOnly: true, sameSite: "Lax" });
+  deleteCookie(c, STATE_COOKIE, { path: "/", secure: true, httpOnly: true, sameSite: "Lax" });
   const raw = signed ? await verifySignedValue(c.env.SESSION_SECRET, signed) : null;
   let parsed: z.infer<typeof StatePayload> | null = null;
   try {

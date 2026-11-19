@@ -39,7 +39,7 @@ describe("security headers on Worker responses", () => {
   it("are set on unhandled errors", async () => {
     // The session lookup throws, so onError answers.
     const failing = requestWithEnv(app, { DB: d1WithHook(/sessions/, async () => { throw new Error("d1_down"); }) });
-    const res = await failing("/api/me", { headers: { Cookie: "session=abc", Origin: ORIGIN } });
+    const res = await failing("/api/me", { headers: { Cookie: "__Host-session=abc", Origin: ORIGIN } });
     expect(res.status).toBe(500);
     expectSecurityHeaders(res);
   });
