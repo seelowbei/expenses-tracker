@@ -11,6 +11,9 @@ import { entryForm, formPatch, formCreate, type FormErrors } from "./form";
 import { syncRemovedEntry, syncReviewedEntry } from "./review-cache";
 import { ReceiptPreview } from "./ReceiptPreview";
 import { formatMoney } from "./format";
+import { AlertIcon, ExternalIcon, MoreIcon, TrashIcon } from "./icons";
+
+const menuItem = "flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-left text-sm hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none disabled:opacity-50 sm:min-h-9 dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800";
 
 type EditorProps = { focusTargetId?: string; account: string; onClose: () => void; onSaved: () => void; onRemoved: (confirmed: boolean) => void } & (
   { entry: LedgerDetail; review?: never } | { entry?: never; review: ReviewDetail & { draft: ReviewDraft } }
@@ -31,7 +34,10 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [checkingDelete, setCheckingDelete] = useState(false);
-  const deleteButton = useRef<HTMLButtonElement>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const menuWrap = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const keepButton = useRef<HTMLButtonElement>(null);
   const busy = reviewBusy || creatingCategory || deleting;
   const [currencyConfirmed, setCurrencyConfirmed] = useState(false);
@@ -70,11 +76,20 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
     if (message) { setPane("details"); detailsPane.current?.scrollTo({ top: 0 }); }
   }, [message]);
   useEffect(() => { if (confirmDelete) keepButton.current?.focus(); }, [confirmDelete]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    menu.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+    const outside = (e: PointerEvent) => { if (!menuWrap.current?.contains(e.target as Node)) setMenuOpen(false); };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [menuOpen]);
+  const closeMenu = () => { setMenuOpen(false); requestAnimationFrame(() => menuButton.current?.focus()); };
   const close = () => {
+    if (menuOpen) { closeMenu(); return; }
     if (busy) return;
     if (confirmDelete) {
       setConfirmDelete(false);
-      requestAnimationFrame(() => deleteButton.current?.focus());
+      requestAnimationFrame(() => menuButton.current?.focus());
     } else if (!dirty || window.confirm("Discard your unsaved changes?")) onClose();
   };
   const addCategory = async (name: string) => {
@@ -181,13 +196,32 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
   };
   return <dialog ref={dialog} aria-labelledby="editor-title" onCancel={(e) => { e.preventDefault(); close(); }}
     className="fixed inset-0 m-auto h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/60 lg:h-[92dvh] lg:w-[94vw] lg:max-w-7xl lg:rounded-xl lg:border lg:border-slate-200 dark:bg-slate-900 dark:text-slate-100 lg:dark:border-slate-700">
-    <form noValidate onSubmit={(e) => { e.preventDefault(); if (!busy && !mustReload && !confirmDelete) void save(); }} className="flex h-full min-h-0 flex-col">
+    <form inert={confirmDelete} noValidate onSubmit={(e) => { e.preventDefault(); if (!busy && !mustReload && !confirmDelete) void save(); }} className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
         <div className="min-w-0">
           <h2 id="editor-title" className="text-lg font-semibold">Review expense</h2>
           <p className="truncate text-sm text-slate-500 dark:text-slate-400">{initial.merchant || "Receipt review"} · {initial.txn_date || "Date needed"}</p>
         </div>
-        <button type="button" className={editorButton} disabled={busy} onClick={close}>Close</button>
+        <div className="flex shrink-0 items-center gap-2">
+          {base && <div ref={menuWrap} className="relative" onBlur={(e) => { if (menuOpen && e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setMenuOpen(false); }}>
+            <button ref={menuButton} type="button" className="btn btn-icon" aria-label="More actions" title="More actions" aria-haspopup="menu" aria-expanded={menuOpen}
+              aria-controls={menuOpen ? "editor-menu" : undefined} disabled={busy} onClick={() => setMenuOpen((open) => !open)}><MoreIcon /></button>
+            {menuOpen && <div ref={menu} id="editor-menu" role="menu" aria-label="More actions" className="absolute right-0 top-full z-30 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                e.preventDefault();
+                const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
+                const i = items.indexOf(document.activeElement as HTMLElement);
+                items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+              }}>
+              {driveLink && <a role="menuitem" href={driveLink} target="_blank" rel="noreferrer" className={menuItem} onClick={closeMenu}><ExternalIcon />View in Drive</a>}
+              {driveLink && <div role="separator" className="my-1 border-t border-slate-200 dark:border-slate-700" />}
+              <button role="menuitem" type="button" className={`${menuItem} text-red-700 dark:text-red-300`} disabled={mustReload}
+                onClick={() => { setMenuOpen(false); setConfirmDelete(true); }}><TrashIcon />Delete expense…</button>
+            </div>}
+          </div>}
+          <button type="button" className={editorButton} disabled={busy} onClick={close}>Close</button>
+        </div>
       </header>
       <nav aria-label="Review views" className="grid shrink-0 grid-cols-2 border-b border-slate-200 p-2 lg:hidden dark:border-slate-700">
         {(["receipt", "details"] as const).map((view) => <button key={view} type="button" aria-pressed={pane === view}
@@ -241,27 +275,31 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
         </div>
       </div>
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900">
-        {confirmDelete ? <div role="group" aria-labelledby="delete-expense-title" aria-describedby="delete-expense-effect" className="flex w-full flex-wrap items-center justify-between gap-2">
-          <div>
-            <p id="delete-expense-title" className="text-sm font-semibold">Permanently delete this expense?</p>
-            <p id="delete-expense-effect" className="text-sm text-slate-600 dark:text-slate-400">This removes the expense from your ledger and totals.{receiptId && " The original receipt stays in Google Drive."}{dirty && " Unsaved changes will be discarded."}</p>
-          </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button ref={keepButton} type="button" className={editorButton} disabled={busy} onClick={close}>Keep expense</button>
-            <button type="button" className="btn btn-danger"
-              disabled={busy} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete permanently"}</button>
-          </div>
-        </div> : <>
-          {base && <button ref={deleteButton} type="button" className={`${editorButton} text-red-700 dark:text-red-300`} disabled={busy || mustReload}
-            onClick={() => setConfirmDelete(true)}>Delete expense</button>}
           <p className="text-xs text-slate-500 dark:text-slate-400" role="status">{creatingCategory ? "Creating category…" : reviewBusy ? "Saving your review…" : dirty ? "You have unsaved changes" : "Ready to confirm these details"}</p>
           <div className="ml-auto flex items-center gap-2">
             <button type="button" className={editorButton} disabled={busy} onClick={close}>Cancel</button>
             <button className="btn btn-primary px-5" disabled={busy || mustReload || categories.isPending || categories.isError}>{reviewBusy ? "Saving…" : "Save review"}</button>
           </div>
-        </>}
       </footer>
     </form>
+    {confirmDelete && base && <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/50 p-4">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="delete-expense-title" aria-describedby="delete-expense-effect"
+        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex gap-3">
+          <span className="mt-0.5 text-red-700 dark:text-red-300"><AlertIcon /></span>
+          <div className="min-w-0">
+            <h3 id="delete-expense-title" className="font-semibold">Delete this expense?</h3>
+            <p id="delete-expense-effect" className="mt-1 break-words text-sm text-slate-600 dark:text-slate-400">
+              {base.merchant} · {formatMoney(base.total_minor, base.currency)} will be removed from your ledger and totals.{receiptId && " The original receipt stays in Google Drive."}{dirty && " Unsaved changes will be discarded."} This can't be undone.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button ref={keepButton} type="button" className={editorButton} disabled={busy} onClick={close}>Keep expense</button>
+          <button type="button" className="btn btn-danger" disabled={busy} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete permanently"}</button>
+        </div>
+      </div>
+    </div>}
   </dialog>;
 }
 
