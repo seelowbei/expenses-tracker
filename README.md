@@ -8,15 +8,15 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
 ## Status
 
-**M3 (pipeline) implemented and locally verified** on `m3/pipeline` on Nov 16, 2026; PR review and staging verification remain. The 12-receipt eval re-run passed date accuracy (91.7%) but missed total accuracy (83.3% versus 90%); verification details and staging follow-ups are tracked in the plan ([`documents/M3 plan.md`](./documents/M3%20plan.md)). **M2 (sign-in + Drive upload) done**, verified locally with real Google accounts. M1 passed provisionally on 10 receipts ([`documents/M1 eval results.md`](./documents/M1%20eval%20results.md)). M2 adds Google sign-in, encrypted refresh tokens, the `Expense Receipts` Drive folder, uploads and the first D1 migrations ([`documents/M2 plan.md`](./documents/M2%20plan.md)). Work follows the spec's milestones:
+**M4 (ledger UI) merged**: ledger browsing with currency-separated totals (M4.1), entry editing and confirmation (M4.2), the review inbox (M4.3), custom categories (M4.4) and entry deletion (M4.5). Staging sign-off for M3 and M4 remains open. Security hardening (response headers and CSP, `__Host-` cookies, capped Drive downloads, push-to-main guard) is merged. An SPA redesign (ledger dashboard with a side rail, date range presets, delete moved to the editor's header menu) is in review in PR #13. The Nov 16 eval re-run on 12 receipts passed date accuracy (91.7%) but missed total accuracy (83.3% versus 90%); both wrong totals were routed to review. Real accuracy will come from user corrections. Work follows the spec's milestones:
 
-| Milestone | Scope |
-| --- | --- |
-| M1 — Extraction spike | Worker + Workers AI only; 50-receipt eval; record accuracy and neurons/receipt |
-| M2 — Auth + Drive | Google sign-in, encrypted refresh tokens, Drive folder, upload |
-| **M3 — Pipeline** | Queue consumer, Zod validation, ledger writes, `ai_usage`, retries, quota parking (daily cron), status polling |
-| M4 — Ledger UI | Category/month views, review & edit, categories, delete |
-| M5 — Hardening & prod | CI/CD, prod env, limit banners, privacy policy, OAuth consent published |
+| Milestone | Scope | Status |
+| --- | --- | --- |
+| M1 — Extraction spike | Worker + Workers AI only; 50-receipt eval; record accuracy and neurons/receipt | Passed provisionally on 10 receipts ([results](./documents/M1%20eval%20results.md)) |
+| M2 — Auth + Drive | Google sign-in, encrypted refresh tokens, Drive folder, upload | Done ([plan](./documents/M2%20plan.md)) |
+| M3 — Pipeline | Queue consumer, Zod validation, ledger writes, `ai_usage`, retries, quota parking (daily cron), status polling | Merged; staging verification open ([plan](./documents/M3%20plan.md)) |
+| **M4 — Ledger UI** | Category/month views, review & edit, categories, delete | Merged; staging sign-off open ([verification](./documents/M4.1%20verification.md)) |
+| M5 — Hardening & prod | CI/CD, prod env, limit banners, privacy policy, OAuth consent published | Next |
 
 ## Stack
 
