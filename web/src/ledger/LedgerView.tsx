@@ -107,11 +107,11 @@ export function LedgerView({ account, onReviewed }: { account: string; onReviewe
           <button className="btn btn-icon" aria-label="Refresh ledger" title="Refresh ledger" onClick={() => { resetPage(); void ledger.refetch(); }} disabled={ledger.isFetching}><RefreshIcon /></button>
           </div>
         </div>
-        {categories.isError && <p role="alert" className="text-sm">Couldn't load categories. <button className="underline" onClick={() => void categories.refetch()}>Retry categories</button></p>}
+        {categories.isError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">Couldn't load categories. <button className="underline" onClick={() => void categories.refetch()}>Retry categories</button></p>}
       </div>
 
       {ledger.isPending ? <p role="status" className="muted">Loading ledger…</p> : ledger.isError ? (
-        <p role="alert" className="card text-sm">{errorMessage} <button className="underline" onClick={() => void ledger.refetch()}>Retry ledger</button></p>
+        <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{errorMessage} <button className="underline" onClick={() => void ledger.refetch()}>Retry ledger</button></p>
       ) : (
         <>
           {ledger.data.totals.length === 0 ? <p role="status" className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm muted dark:border-slate-700">No expenses in this range. Upload a receipt or choose another range.</p> : (
