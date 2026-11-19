@@ -2,8 +2,10 @@ import type { ReviewDetail, ReviewDraft } from "../../../worker/src/contracts/re
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { LedgerDetail } from "../../../worker/src/contracts/ledger";
-import { ApiError, getLedgerEntry, getReceiptDetail, createReceiptReview, listCategories, patchLedgerEntry } from "../api";
+import type { CategoryDto } from "../../../worker/src/contracts/categories";
+import { ApiError, createCategory, getLedgerEntry, getReceiptDetail, createReceiptReview, listCategories, patchLedgerEntry } from "../api";
 import { clearSession } from "../query-client";
+import { CategoryCreate } from "./CategoryCreate";
 import { EntryFields, editorButton } from "./EntryFields";
 import { entryForm, formPatch, formCreate, type FormErrors } from "./form";
 import { syncReviewedEntry } from "./review-cache";
@@ -23,7 +25,9 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
   const [base, setBase] = useState<LedgerDetail | null>(entry ?? null);
   const [form, setForm] = useState(() => entryForm(entry ?? review?.draft ?? {}));
   const [errors, setErrors] = useState<FormErrors>({});
-  const [busy, setBusy] = useState(false);
+  const [reviewBusy, setBusy] = useState(false);
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const busy = reviewBusy || creatingCategory;
   const [currencyConfirmed, setCurrencyConfirmed] = useState(false);
   const [message, setMessage] = useState("");
   const [mustReload, setMustReload] = useState(false);
@@ -34,7 +38,8 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
   const driveLink = base?.drive_link ?? review?.receipt.driveLink ?? null;
   const reasons = base?.review_reasons ?? review?.receipt.reviewReasons;
   const pending = (base?.receipt_status ?? review?.receipt.status) === "needs_review";
-  const categories = useQuery({ queryKey: ["categories", account], queryFn: ({ signal }) => listCategories(signal) });
+  const categoryKey = ["categories", account];
+  const categories = useQuery({ queryKey: categoryKey, queryFn: ({ signal }) => listCategories(signal) });
   const dirty = JSON.stringify(form) !== JSON.stringify(entryForm(initial));
   useEffect(() => {
     active.current = true;
@@ -59,6 +64,27 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
     if (message) { setPane("details"); detailsPane.current?.scrollTo({ top: 0 }); }
   }, [message]);
   const close = () => { if (!busy && (!dirty || window.confirm("Discard your unsaved changes?"))) onClose(); };
+  const addCategory = async (name: string) => {
+    setCreatingCategory(true);
+    const controller = new AbortController();
+    request.current = controller;
+    try {
+      const category = await createCategory(name, controller.signal);
+      await qc.cancelQueries({ queryKey: categoryKey });
+      if (!active.current || qc.getQueryData<{ email: string } | null>(["me"])?.email !== account) return false;
+      qc.setQueryData<CategoryDto[]>(categoryKey, (rows = []) => rows.some((row) => row.id === category.id) ? rows : [...rows, category]);
+      setForm((draft) => ({ ...draft, category_id: category.id }));
+      setErrors(({ category_id, ...remaining }) => remaining);
+      void qc.invalidateQueries({ queryKey: categoryKey });
+      return true;
+    } catch (error) {
+      if (!active.current || qc.getQueryData<{ email: string } | null>(["me"])?.email !== account) return false;
+      if (!(error instanceof ApiError) || error.status !== 401) void qc.invalidateQueries({ queryKey: categoryKey });
+      throw error;
+    } finally {
+      if (active.current) setCreatingCategory(false);
+    }
+  };
   const reload = async () => {
     setBusy(true); setLatest(null); setCanRetryCreate(false);
     request.current = new AbortController();
@@ -160,7 +186,8 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
           {categories.isError && <p role="alert" className="text-sm">Couldn't load categories. <button type="button" className="underline" onClick={() => void categories.refetch()}>Retry categories</button></p>}
           <fieldset disabled={busy || categories.isPending || categories.isError} className="space-y-4">
             <legend className="sr-only">Expense fields</legend>
-            <EntryFields form={form} errors={errors} categories={categories.data ?? []} setForm={(next) => {
+            <EntryFields form={form} errors={errors} categories={categories.data ?? []}
+              categoryAction={<CategoryCreate onCreate={addCategory} onSessionExpired={() => clearSession(qc)} />} setForm={(next) => {
               if (next.currency !== form.currency) setCurrencyConfirmed(false);
               setForm(next);
             }} />
@@ -172,10 +199,10 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
         </div>
       </div>
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900">
-        <p className="text-xs text-slate-500 dark:text-slate-400" role="status">{busy ? "Saving your review…" : dirty ? "You have unsaved changes" : "Ready to confirm these details"}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400" role="status">{creatingCategory ? "Creating category…" : reviewBusy ? "Saving your review…" : dirty ? "You have unsaved changes" : "Ready to confirm these details"}</p>
         <div className="ml-auto flex items-center gap-2">
           <button type="button" className={editorButton} disabled={busy} onClick={close}>Cancel</button>
-          <button className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50" disabled={busy || mustReload || categories.isPending || categories.isError}>{busy ? "Saving…" : "Save review"}</button>
+          <button className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50" disabled={busy || mustReload || categories.isPending || categories.isError}>{reviewBusy ? "Saving…" : "Save review"}</button>
         </div>
       </footer>
     </form>

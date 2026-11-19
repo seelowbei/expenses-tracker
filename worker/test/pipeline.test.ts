@@ -6,7 +6,7 @@ import { cacheAccessToken, clearAccessTokenCache } from "../src/drive/access";
 import type { ReceiptMessage } from "../src/pipeline/message";
 import { processReceipt } from "../src/pipeline/process";
 import { handleQueue } from "../src/pipeline/queue";
-import { bindings, db, downloadUrl, fakeGoogle, seedUser } from "./helpers";
+import { bindings, db, downloadUrl, fakeGoogle, makeApp, ORIGIN, seedUser } from "./helpers";
 
 beforeEach(() => clearAccessTokenCache());
 
@@ -123,6 +123,32 @@ describe("processReceipt: valid extraction", () => {
     const usage = await usageFor(id);
     expect(usage).toHaveLength(1);
     expect(usage[0]).toMatchObject({ kind: "extract", outcome: "ok", attempt: 1, promptTokens: 6800, inputMode: "image" });
+  });
+
+  it("offers a newly created category only to its owner and stores the chosen category", async () => {
+    const owned = await setup();
+    const other = await setup();
+    const res = await makeApp().request("/api/categories", {
+      method: "POST",
+      headers: { Cookie: owned.user.cookie, Origin: ORIGIN, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Pet Care" }),
+    });
+    expect(res.status).toBe(201);
+    const { category } = await res.json<{ category: { id: string; slug: string } }>();
+    for (const [receipt, canSeeCategory] of [[owned, true], [other, false]] as const) {
+      const fake = fakeAi([reply({ category_slug: canSeeCategory ? category.slug : "transport" })]);
+      const prompts: string[] = [];
+      const ai: AiClient = {
+        ...fake.ai,
+        run: (model, input) => {
+          prompts.push(JSON.stringify(input.messages));
+          return fake.ai.run(model, input);
+        },
+      };
+      expect(await receipt.run(ai)).toEqual({ action: "ack" });
+      expect(prompts.some((prompt) => prompt.includes(category.slug))).toBe(canSeeCategory);
+      expect(await ledgerFor(receipt.id)).toMatchObject([{ categoryId: canSeeCategory ? category.id : "sys_transport" }]);
+    }
   });
 
   it("goes to needs_review with the reasons stored, and still writes the entry", async () => {

@@ -1,6 +1,6 @@
 # M4 plan — Ledger and review
 
-November 18, 2026. **M4.1 and M4.2 are merged. M4.3 is implemented and locally verified on `codex/m4-3`; PR review and staging checks remain. M4.4–M4.5 remain planned.**
+November 19, 2026. **M4.1–M4.3 are merged. M4.4 is implemented in the working tree with local SQLite and Chrome smoke checks complete. All 281 Workerd tests and worker/web typechecks passed. M4.5 remains planned.**
 
 Source: [Technical spec](../documents/Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. Implementation checklist: [todo.md](todo.md).
 
@@ -23,7 +23,7 @@ M4 does not include manual expense creation without a receipt, category rename/d
 
 ## Decisions and proposals
 
-Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The M4.2 existing-entry write proposals were adopted with the November 17 implementation request and recorded in the technical spec. The M4.3 review contracts were adopted with the November 18 implementation request and recorded in the spec. Remaining M4.4–M4.5 details below are proposals filling gaps in the spec, not previously accepted requirements. Reconcile them in the technical spec before dependent implementation. The existing M4 requirements above remain authoritative.
+Explicit review confirmation tracking was accepted by the user on November 16, 2026. M4.1 read behavior was adopted for implementation and recorded in the technical spec. The M4.2 existing-entry write proposals were adopted with the November 17 implementation request and recorded in the technical spec. The M4.3 review contracts were adopted with the November 18 implementation request and recorded in the spec. The M4.4 category creation contract was adopted with the November 19 implementation request and recorded in the spec. Reconcile remaining M4.5 proposals with the technical spec before implementing them. The existing M4 requirements above remain authoritative.
 
 ### 1. Complete the review API
 
@@ -79,7 +79,7 @@ Money inputs stay decimal strings until converted exactly to safe integer minor 
 
 Do not make human confirmation depend on reproducing the model's total-text or line-item heuristics. Display the original warnings; the user can confirm a valid corrected total even if the original extraction remains inconsistent. Save normalized line items as `{ description, amount_minor }`, matching current persistence.
 
-Propose custom category names of 1–60 trimmed characters, slug generation on the server, and rejection of duplicate names/slugs against the user's visible categories (409 `category_exists`). For names without a usable ASCII slug, use a stable server-generated suffix. New categories cannot shadow system slugs; existing colliding categories remain readable and retain the current resolver precedence. No category rename/delete UI. Creating a category refreshes the selector immediately; the next extraction uses it through the existing category lookup.
+Custom category creation uses the M4.4 contract in the technical spec. The conditional insert checks the user's visible categories for both display-name and slug collisions. Both review paths share the inline creation control, and the existing category lookup supplies custom slugs to later extraction.
 
 ## Writes, recovery and concurrency
 

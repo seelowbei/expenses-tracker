@@ -53,6 +53,11 @@ export const listReceipts = (signal?: AbortSignal) => call<{ receipts: Receipt[]
 export const listCategories = (signal?: AbortSignal) =>
   call<{ categories: CategoryDto[] }>("/api/categories", { signal }).then((r) => r.categories);
 
+export const createCategory = (name: string, signal?: AbortSignal) =>
+  call<{ category: CategoryDto }>("/api/categories", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }), signal,
+  }).then((r) => r.category);
+
 export function listLedger(filters: LedgerFilters, cursor?: string, signal?: AbortSignal) {
   const query = new URLSearchParams({ from: filters.from, to: filters.to });
   if (filters.category) query.set("category", filters.category);

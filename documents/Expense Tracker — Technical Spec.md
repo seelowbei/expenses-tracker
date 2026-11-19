@@ -315,6 +315,14 @@ The UI polls `GET /api/receipts?status=queued,processing` every 3 s while anythi
 
 Ledger entries carry `txn_time` (`"HH:MM"` or `null`). `GET /api/ledger` orders entries by `txn_date` then `txn_time` (entries without a time last within their day), and `PATCH /api/ledger/:id` accepts `txn_time` (`"HH:MM"` or `null`) like any other field. AI usage has no API in v1; it is stored for later reporting and queried with `wrangler d1 execute` until then.
 
+### M4.4 custom categories
+
+`POST /api/categories` accepts a strict JSON object with a single `name` field (1–60 UTF-16 code units after trimming, with no control characters). It uses the existing 32 KiB streamed-body limit, session and Origin checks, and standard body errors. Success returns `201 { category: { id, slug, name } }`. The server generates the ID and assigns ownership from the session.
+
+The slug uses lowercase ASCII letters and digits with hyphen separators after Unicode decomposition and removal of combining marks. If that yields no slug, use `custom-` followed by the SHA-256 hex digest of the lowercased NFKC name. A matching slug or ASCII case-insensitive display name among visible categories returns `409 category_exists`. Check for conflicts in the insert statement so concurrent requests cannot create duplicates. Existing categories retain their stored names, slugs and resolution precedence.
+
+The shared editor creates and selects the category without discarding expense edits. The expense assignment persists when the user saves the review. The category is private to its owner and becomes available to later extractions through the existing category lookup. Rename and deletion are outside this milestone.
+
 ### M4.3 review inbox (November 18, 2026)
 
 Receipt listing adds `cursor`/`limit` and returns `{ receipts, nextCursor }`, preserving existing camelCase receipt fields and status-filter behavior. Default 50, maximum 100, strict positive integer limit. Sort by `created_at DESC, id DESC`, independently of transaction dates. Cursors carry upload timestamp, ID and normalized status filters; reject malformed/oversized/mismatched cursors with `400 invalid_filters`. Invalid statuses retain `400 invalid_status`. Select metadata only. The pending inbox uses `status=needs_review` and is independent of ledger filters; refresh discovers new receipts and saving resets pagination.
