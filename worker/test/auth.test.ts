@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { decryptToken } from "../src/auth/crypto";
-import { validateSession } from "../src/auth/session";
+import { STATE_COOKIE } from "../src/auth/routes";
+import { SESSION_COOKIE, validateSession } from "../src/auth/session";
 import { users } from "../src/db/schema";
 import { clearAccessTokenCache } from "../src/drive/access";
 import { ALL_SCOPES, cookieValue, db, FOLDER_URL, fakeGoogle, idToken, json, makeApp, ORIGIN, seedUser, setCookies, TOKEN_URL, tokenResponse } from "./helpers";
@@ -16,9 +17,9 @@ async function signIn(google: ReturnType<typeof fakeGoogle>, start = "/auth/goog
   expect(res1.status).toBe(302);
   const location = new URL(res1.headers.get("Location")!);
   const state = location.searchParams.get("state")!;
-  const stateCookie = setCookies(res1).get("oauth_state")!;
+  const stateCookie = setCookies(res1).get(STATE_COOKIE)!;
   const res2 = await request(`/auth/google/callback?code=c0de&state=${state}&iss=https%3A%2F%2Faccounts.google.com`, {
-    headers: { Cookie: `oauth_state=${cookieValue(stateCookie)}` },
+    headers: { Cookie: `${STATE_COOKIE}=${cookieValue(stateCookie)}` },
   });
   return { location, res: res2 };
 }
@@ -37,11 +38,14 @@ describe("GET /auth/google", () => {
     expect(url.searchParams.get("client_id")).toBe(env.GOOGLE_CLIENT_ID);
     expect(url.searchParams.has("prompt")).toBe(false);
 
-    const cookie = setCookies(res).get("oauth_state")!;
+    expect(STATE_COOKIE).toBe("__Host-oauth_state");
+    const cookie = setCookies(res).get(STATE_COOKIE)!;
     expect(cookie).toMatch(/HttpOnly/);
     expect(cookie).toMatch(/Secure/);
     expect(cookie).toMatch(/SameSite=Lax/);
-    expect(cookie).toMatch(/Path=\/auth/);
+    // __Host- cookies are dropped by browsers unless Path=/ and no Domain.
+    expect(cookie).toMatch(/Path=\/(;|$)/);
+    expect(cookie).not.toMatch(/Domain=/i);
   });
 
   it("adds prompt=consent when asked", async () => {
@@ -79,7 +83,10 @@ describe("GET /auth/google/callback", () => {
     expect(user?.refreshTokenEnc).toMatch(/^v1:/);
     expect(await decryptToken(env.TOKEN_ENC_KEY, user!.refreshTokenEnc!)).toBe("1//rt-new");
 
-    const session = setCookies(res).get("session")!;
+    expect(SESSION_COOKIE).toBe("__Host-session");
+    const session = setCookies(res).get(SESSION_COOKIE)!;
+    expect(session).toMatch(/Path=\/(;|$)/);
+    expect(session).not.toMatch(/Domain=/i);
     expect(session).toMatch(/HttpOnly/);
     expect(session).toMatch(/Secure/);
     expect(session).toMatch(/SameSite=Lax/);
@@ -91,7 +98,7 @@ describe("GET /auth/google/callback", () => {
     const google = fakeGoogle({ [TOKEN_URL]: () => tokenResponse({ sub, email: "mallory@example.com", refreshToken: "rt" }) });
     const { res } = await signIn(google);
     expect(res.headers.get("Location")).toBe("/?error=not_allowed");
-    expect(setCookies(res).has("session")).toBe(false);
+    expect(setCookies(res).has(SESSION_COOKIE)).toBe(false);
     expect(await db().select().from(users).where(eq(users.googleSub, sub)).get()).toBeUndefined();
   });
 
@@ -109,7 +116,7 @@ describe("GET /auth/google/callback", () => {
     for (const claims of [{ aud: "someone-else" }, { iss: "https://evil.example" }, { exp: Math.floor(Date.now() / 1000) - 3600 }]) {
       const { res } = await signIn(fakeGoogle({ [TOKEN_URL]: bad(claims) }));
       expect(res.headers.get("Location")).toBe("/?error=token_exchange_failed");
-      expect(setCookies(res).has("session")).toBe(false);
+      expect(setCookies(res).has(SESSION_COOKIE)).toBe(false);
     }
   });
 
@@ -159,11 +166,11 @@ describe("GET /auth/google/callback", () => {
     const { request } = makeApp();
     expect((await request("/auth/google/callback?code=x&state=y")).headers.get("Location")).toBe("/?error=auth_expired");
     expect(
-      (await request("/auth/google/callback?code=x&state=y", { headers: { Cookie: "oauth_state=forged.value" } })).headers.get("Location"),
+      (await request("/auth/google/callback?code=x&state=y", { headers: { Cookie: `${STATE_COOKIE}=forged.value` } })).headers.get("Location"),
     ).toBe("/?error=auth_expired");
 
     const res1 = await request("/auth/google");
-    const cookie = `oauth_state=${cookieValue(setCookies(res1).get("oauth_state")!)}`;
+    const cookie = `${STATE_COOKIE}=${cookieValue(setCookies(res1).get(STATE_COOKIE)!)}`;
     expect((await request("/auth/google/callback?code=x&state=wrong", { headers: { Cookie: cookie } })).headers.get("Location")).toBe("/?error=bad_callback");
 
     const state = new URL(res1.headers.get("Location")!).searchParams.get("state");
@@ -181,12 +188,22 @@ describe("POST /auth/logout", () => {
     expect(res.status).toBe(403);
   });
 
+  it("ignores a session token sent under the old unprefixed name, and logout clears that cookie", async () => {
+    const { token } = await seedUser();
+    const { request } = makeApp();
+    expect((await request("/api/me", { headers: { Cookie: `session=${token}` } })).status).toBe(401);
+    const res = await request("/auth/logout", { method: "POST", headers: { Cookie: `session=${token}`, Origin: ORIGIN } });
+    expect(res.status).toBe(204);
+    expect(setCookies(res).get("session")).toMatch(/Max-Age=0/);
+    expect(setCookies(res).get(SESSION_COOKIE)).toMatch(/Max-Age=0/);
+  });
+
   it("deletes all of the user's sessions and clears the cookie", async () => {
     const { cookie, token } = await seedUser();
     const { request } = makeApp();
     const res = await request("/auth/logout", { method: "POST", headers: { Cookie: cookie, Origin: ORIGIN } });
     expect(res.status).toBe(204);
-    expect(setCookies(res).get("session")).toMatch(/Max-Age=0/);
+    expect(setCookies(res).get(SESSION_COOKIE)).toMatch(/Max-Age=0/);
     expect(await validateSession(db(), token)).toBeNull();
   });
 });
@@ -213,13 +230,13 @@ describe("GET /api/me", () => {
     const res = await request("/api/me", { headers: { Cookie: cookie } });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "not_allowed" });
-    expect(setCookies(res).get("session")).toMatch(/Max-Age=0/);
+    expect(setCookies(res).get(SESSION_COOKIE)).toMatch(/Max-Age=0/);
     expect(await validateSession(db(), token)).toBeNull();
   });
 
   it("is 401 without a session", async () => {
     const { request } = makeApp();
     expect((await request("/api/me")).status).toBe(401);
-    expect((await request("/api/me", { headers: { Cookie: "session=bogus" } })).status).toBe(401);
+    expect((await request("/api/me", { headers: { Cookie: `${SESSION_COOKIE}=bogus` } })).status).toBe(401);
   });
 });
