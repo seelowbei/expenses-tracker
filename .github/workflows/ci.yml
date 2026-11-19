@@ -1,4 +1,4 @@
-# Typecheck and test on every PR. No deploy, no secrets.
+# Typecheck, test and build on every PR. No deploy, no secrets.
 # Pushes to main and published releases run this via deploy.yml (workflow_call) before deploying.
 name: CI
 
@@ -40,6 +40,13 @@ jobs:
 
       - name: Test with coverage
         run: pnpm --filter worker coverage
+
+      # Same build as deploy.yml, so a broken build fails the PR rather than the deploy.
+      # No secrets: `bundle` is a wrangler dry run.
+      - name: Build (web + worker bundle)
+        run: |
+          pnpm --filter web build
+          pnpm --filter worker bundle
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
