@@ -2,8 +2,9 @@
 #   staging:    every merge (push) to main, or a manual run on main
 #   production: publishing a GitHub release whose tag is v* and points at a commit on main
 #               (prereleases are skipped). Roll back by re-running an older release's run.
-# Needs repo secrets CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, PULUMI_ACCESS_TOKEN
-# and the services stack config per env (see infrastructure/README.md).
+# Needs CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, PULUMI_ACCESS_TOKEN as environment secrets
+# on the staging and production environments, and the services stack config per env
+# (see infrastructure/README.md).
 name: Deploy
 
 on:
@@ -17,11 +18,12 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  ci:
     uses: ./.github/workflows/ci.yml
 
+  # No always()/failure() in `if`, so a failed or cancelled CI run skips the deploy.
   deploy:
-    needs: check
+    needs: ci
     if: >-
       (github.event_name == 'release'
         && startsWith(github.event.release.tag_name, 'v')
