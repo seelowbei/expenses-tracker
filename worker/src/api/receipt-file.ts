@@ -5,6 +5,7 @@ import { clearSessionCookie } from "../auth/session";
 import { receipts } from "../db/schema";
 import { DriveDisconnectedError, withDrive } from "../drive/access";
 import { DriveError } from "../drive/client";
+import { MAX_UPLOAD_BYTES } from "../lib/sniff";
 
 export const receiptFileRoutes = new Hono<AppEnv>();
 receiptFileRoutes.get("/:id/file", async (c) => {
@@ -19,7 +20,7 @@ receiptFileRoutes.get("/:id/file", async (c) => {
   if (!["image/jpeg", "image/png", "application/pdf"].includes(receipt.mime)) return c.json({ error: "unsupported_type" }, 415);
   try {
     const response = await withDrive(c.env, deps, db, user, (drive) => drive.openFile(receipt.fileId!));
-    if (Number(response.headers.get("Content-Length")) > 10 * 1024 * 1024) {
+    if (Number(response.headers.get("Content-Length")) > MAX_UPLOAD_BYTES) {
       await response.body?.cancel();
       return c.json({ error: "file_too_large" }, 413);
     }

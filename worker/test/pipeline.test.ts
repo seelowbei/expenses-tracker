@@ -4,6 +4,7 @@ import type { AiClient } from "../src/agent/extract";
 import { aiUsage, categories, ledgerEntries, receipts, users } from "../src/db/schema";
 import { cacheAccessToken, clearAccessTokenCache } from "../src/drive/access";
 import type { ReceiptMessage } from "../src/pipeline/message";
+import { MAX_UPLOAD_BYTES } from "../src/lib/sniff";
 import { processReceipt } from "../src/pipeline/process";
 import { handleQueue } from "../src/pipeline/queue";
 import { bindings, db, downloadUrl, fakeGoogle, makeApp, ORIGIN, seedUser } from "./helpers";
@@ -385,6 +386,15 @@ describe("processReceipt: failures", () => {
     expect(await run(ai)).toEqual({ action: "ack" });
     expect(calls).toEqual([]);
     expect(await receiptRow(id)).toMatchObject({ status: "failed", error: "drive_file_missing" });
+  });
+
+  it("a Drive file over the upload limit fails with file_too_large and makes no AI call", async () => {
+    const { id, fileId, google, run } = await setup();
+    google.set(downloadUrl(fileId), () => new Response("x", { headers: { "Content-Length": String(MAX_UPLOAD_BYTES + 1) } }));
+    const { ai, calls } = fakeAi([reply()]);
+    expect(await run(ai)).toEqual({ action: "ack" });
+    expect(calls).toEqual([]);
+    expect(await receiptRow(id)).toMatchObject({ status: "failed", error: "file_too_large" });
   });
 
   it("Drive 5xx retries as drive_unavailable", async () => {

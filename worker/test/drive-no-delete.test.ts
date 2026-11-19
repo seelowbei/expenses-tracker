@@ -26,7 +26,7 @@ describe("Drive is write-once", () => {
 
     await drive.createFolder();
     await drive.uploadMultipart({ name: "r.jpg", mimeType: "image/jpeg", parentId: "folder", body: new Blob(["x"]) });
-    await drive.downloadFile("file");
+    await drive.downloadFile("file", 1024);
     await (await drive.openFile("file")).body?.cancel();
     for (const call of google.calls) {
       // POST to the collection = create; GET = read. Any other method on /files/<id> would be an update or delete.
