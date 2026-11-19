@@ -40,6 +40,19 @@ for (const [what, p] of [["Worker bundle", workerBundle], ["SPA assets", assetsD
 
 const workerSha256 = crypto.createHash("sha256").update(fs.readFileSync(workerBundle)).digest("hex");
 
+// Cloudflare applies `_headers` (CSP, frame-ancestors, HSTS for the SPA) only when its contents are sent
+// as assets.config.headers. The provider's directory upload would publish it as a plain file instead,
+// so it is read here and the assets are uploaded from a copy without it. Wrangler dev reads the file itself.
+const HEADERS_FILE = "_headers";
+const headersPath = path.join(assetsDir, HEADERS_FILE);
+if (!fs.existsSync(headersPath)) {
+  throw new Error(`${HEADERS_FILE} not found in ${assetsDir}; it comes from web/public/${HEADERS_FILE}.`);
+}
+const assetHeaders = fs.readFileSync(headersPath, "utf8");
+const uploadDir = path.join(__dirname, ".build", "assets");
+fs.rmSync(uploadDir, { recursive: true, force: true });
+fs.cpSync(assetsDir, uploadDir, { recursive: true, filter: (src) => path.relative(assetsDir, src) !== HEADERS_FILE });
+
 // ---- Worker ----------------------------------------------------------------
 
 // Production keeps the bare name so it serves at expense-tracker.<sub>.workers.dev.
@@ -56,8 +69,9 @@ const worker = new cloudflare.WorkersScript("worker", {
   compatibilityDate: config.get("compatibilityDate") ?? "2026-11-01",
   compatibilityFlags: ["nodejs_compat"],
   assets: {
-    directory: assetsDir,
+    directory: uploadDir,
     config: {
+      headers: assetHeaders,
       notFoundHandling: "single-page-application",
       runWorkerFirst: ["/api/*", "/auth/*"],
     },
