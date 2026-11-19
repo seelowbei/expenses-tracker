@@ -28,6 +28,12 @@ describe("blockedPush", () => {
     ["option before refspec", "git push --force-with-lease origin main", onBranch("feature")],
     ["push option value", "git push -o ci.skip origin main", onBranch("feature")],
     ["quoted refspec", `git push origin "HEAD:main"`, onBranch("feature")],
+    ["a push after a heredoc ends", "cat <<'EOF' > notes.txt\ngit push is mentioned here\nEOF\ngit push origin main", onBranch("feature")],
+    ["a push on the heredoc's own line", "git push origin main <<'EOF'\ntext\nEOF", onBranch("feature")],
+    ["a push after two heredocs on one line", "cat <<A <<B\na\nA\nb\nB\ngit push origin main", onBranch("feature")],
+    ["a here-string is not a heredoc", "cat <<< x && git push origin main", onBranch("feature")],
+    ["a # inside a word is not a comment", "git push origin feat#1:main", onBranch("feature")],
+    ["a subshell", "echo $(git push origin main)", onBranch("feature")],
   ];
   for (const [name, cmd, state] of blocked) {
     it(`blocks ${name}`, () => assert.ok(blockedPush(cmd, "/repo", state), cmd));
@@ -41,6 +47,12 @@ describe("blockedPush", () => {
     ["fetching main", "git fetch origin main && git pull --ff-only origin main", onBranch("main")],
     ["text mentioning git push", `echo "never git push to main"`, onBranch("main")],
     ["not a push", "git log origin/main", onBranch("main")],
+    ["a heredoc commit message", "git commit -q -F - <<'EOF'\nNever git push to main from a hook.\nEOF", onBranch("feature")],
+    ["a heredoc PR body", "gh pr create --body-file - <<'EOF'\n- run git push origin main only via CI\nEOF", onBranch("feature")],
+    ["an unquoted heredoc", "cat <<EOF\ngit push origin main\nEOF", onBranch("feature")],
+    ["a <<- heredoc with tab-indented delimiter", "cat <<-END\n\tgit push origin main\n\tEND", onBranch("feature")],
+    ["a comment line", "# git push origin main\necho ok", onBranch("feature")],
+    ["a trailing comment", "echo ok # then git push origin main", onBranch("feature")],
   ];
   for (const [name, cmd, state] of allowed) {
     it(`allows ${name}`, () => assert.equal(blockedPush(cmd, "/repo", state), null, cmd));
