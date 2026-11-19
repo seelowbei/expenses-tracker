@@ -26,8 +26,8 @@ async function sniff(file: File): Promise<Kind | null> {
 
 async function decode(file: File, kind: Kind): Promise<ImageBitmap> {
   if (kind === "heic") {
-    // ~3 MB (libheif wasm): loaded only when a HEIC file is picked.
-    const { heicTo } = await import("heic-to");
+    // ~3 MB (libheif): loaded only when a HEIC file is picked. The /csp build needs no 'unsafe-eval'.
+    const { heicTo } = await import("heic-to/csp");
     return heicTo({ blob: file, type: "bitmap" });
   }
   return createImageBitmap(file, { imageOrientation: "from-image" });

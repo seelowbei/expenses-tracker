@@ -1,0 +1,13 @@
+# Security headers for static asset responses (SPA shell, JS, CSS, icons).
+# Cloudflare applies these to assets only; Worker routes (/api/*, /auth/*) set their own
+# headers in worker/src/lib/security-headers.ts.
+#   img-src blob:   receipt image preview (object URL)
+#   frame-src blob: receipt PDF preview (object URL in an iframe)
+#   worker-src blob: heic-to/csp runs its HEIC decoder in a Worker built from a Blob
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; frame-src blob:; worker-src blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
