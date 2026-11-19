@@ -1,6 +1,6 @@
 # Expense Tracker — Technical Spec
 
-Nov 9, 2026 · @Celine Low
+Nov 9, 2026
 
 **Revisions**
 

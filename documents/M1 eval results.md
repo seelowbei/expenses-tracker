@@ -49,7 +49,7 @@ The first run scored 60% on date. The model copied the prompt's example date int
 - **Date:** a faded thermal receipt was misread (09 → 19). No prompt or code change can fix that.
 - **Time:** used the "Print @" time once, despite the prompt rule.
 - **Merchant:** a receipt with the brand only as a logo (Chinese calligraphy) returned the legal entity name.
-- **Category:** falls back to `other` for less obvious cases (a certification fee, a bottled drink from a TCM shop).
+- **Category:** falls back to `other` for less obvious cases.
 
 ## PDF path
 
@@ -57,12 +57,12 @@ Two text PDFs went through `toMarkdown()` and then the same model as text.
 
 - **Cheaper and faster than images:** about 1,700 input tokens and 16–25 neurons per receipt, against about 7,700 and 43 for images.
 - **The flight booking:** extracted correctly. It used the issue date rather than the flight dates.
-- **The hotel booking:** first run, the model copied the stay ("Oct 12, 2026 - Oct 15, 2026") as the date and failed twice. After the date rule named payment/issue dates and excluded travel dates and ranges, the date was right. The total came back garbled (26,456 instead of 24,656), and `total_mismatch` caught it against the copied line.
+- **The hotel booking:** first run, the model copied the stay date range as the date and failed twice. After the date rule named payment/issue dates and excluded travel dates and ranges, the date was right. The total came back garbled (two digits swapped), and `total_mismatch` caught it against the copied line.
 - **Scanned PDFs:** none tested yet.
 
 ## Run-to-run variation
 
-Results vary between runs even at temperature 0. In the 12-receipt run, a receipt that was right three times before returned its first item (349.00) as the total, and copied an unrelated line as `total_text`. Total accuracy for that run was 75% (9/12). This is one more reason not to treat a 10-receipt score as stable.
+Results vary between runs even at temperature 0. In the 12-receipt run, a receipt that was right three times before returned its first line item as the total, and copied an unrelated line as `total_text`. Total accuracy for that run was 75% (9/12). This is one more reason not to treat a 10-receipt score as stable.
 
 ## Review checks
 
