@@ -25,6 +25,8 @@ describe("private original receipt stream", () => {
     expect(response.headers.get("Content-Type")).toBe("image/png");
     expect(response.headers.get("Cache-Control")).toContain("no-store");
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    // Merchant PDFs are untrusted: opened directly on our origin they get no script, no subresources and a sandbox.
+    expect(response.headers.get("Content-Security-Policy")).toMatch(/default-src 'none'.*sandbox/);
     expect(response.headers.get("Set-Cookie") ?? "").not.toContain("upstream");
     expect(google.calls).toHaveLength(1);
   });
