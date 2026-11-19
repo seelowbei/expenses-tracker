@@ -40,7 +40,12 @@ export function LedgerView({ account, onReviewed }: { account: string; onReviewe
   return (
     <section aria-labelledby="ledger-heading" className="space-y-4">
       {notice && <p role="status" className="text-sm text-teal-700 dark:text-teal-400">{notice}</p>}
-      {editing && <EntryEditor entry={editing} account={account} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setNotice("Review saved. Ledger totals updated."); onReviewed(); }} />}
+      {editing && <EntryEditor entry={editing} account={account} onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); setNotice("Review saved. Ledger totals updated."); onReviewed(); }}
+        onRemoved={(confirmed) => {
+          setEditing(null); resetPage(); onReviewed();
+          setNotice(confirmed ? "Expense deleted. Ledger totals updated." : "This expense is no longer available.");
+        }} />}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="ledger-heading" tabIndex={-1} className="text-lg font-semibold">Ledger</h2>
         <button className={control} onClick={() => { resetPage(); void ledger.refetch(); }} disabled={ledger.isFetching}>Refresh ledger</button>

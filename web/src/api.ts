@@ -84,6 +84,12 @@ export const patchLedgerEntry = (id: string, patch: LedgerPatch, signal?: AbortS
     method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch), signal,
   }).then((r) => r.entry);
 
+export const deleteLedgerEntry = (id: string, updatedAt: string, signal?: AbortSignal) =>
+  call<void>(`/api/ledger/${encodeURIComponent(id)}`, {
+    method: "DELETE", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expected_updated_at: updatedAt }), signal,
+  });
+
 export async function getReceiptFile(id: string, signal?: AbortSignal): Promise<Blob> {
   const res = await fetch(`/api/receipts/${encodeURIComponent(id)}/file`, { credentials: "same-origin", cache: "no-store", signal });
   if (!res.ok) {

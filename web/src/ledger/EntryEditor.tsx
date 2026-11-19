@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { LedgerDetail } from "../../../worker/src/contracts/ledger";
 import type { CategoryDto } from "../../../worker/src/contracts/categories";
-import { ApiError, createCategory, getLedgerEntry, getReceiptDetail, createReceiptReview, listCategories, patchLedgerEntry } from "../api";
+import { ApiError, createCategory, deleteLedgerEntry, getLedgerEntry, getReceiptDetail, createReceiptReview, listCategories, patchLedgerEntry } from "../api";
 import { clearSession } from "../query-client";
 import { CategoryCreate } from "./CategoryCreate";
 import { EntryFields, editorButton } from "./EntryFields";
@@ -12,22 +12,28 @@ import { syncReviewedEntry } from "./review-cache";
 import { ReceiptPreview } from "./ReceiptPreview";
 import { formatMoney } from "./format";
 
-type EditorProps = { focusTargetId?: string; account: string; onClose: () => void; onSaved: () => void } & (
+type EditorProps = { focusTargetId?: string; account: string; onClose: () => void; onSaved: () => void; onRemoved: (confirmed: boolean) => void } & (
   { entry: LedgerDetail; review?: never } | { entry?: never; review: ReviewDetail & { draft: ReviewDraft } }
 );
-export function EntryEditor({ entry, review, account, onClose, onSaved, focusTargetId = "ledger-heading" }: EditorProps) {
+export function EntryEditor({ entry, review, account, onClose, onSaved, onRemoved, focusTargetId = "ledger-heading" }: EditorProps) {
   const qc = useQueryClient();
   const dialog = useRef<HTMLDialogElement>(null);
   const detailsPane = useRef<HTMLDivElement>(null);
   const [pane, setPane] = useState<"receipt" | "details">("details");
   const active = useRef(true);
+  const removed = useRef(false);
   const request = useRef<AbortController | null>(null);
   const [base, setBase] = useState<LedgerDetail | null>(entry ?? null);
   const [form, setForm] = useState(() => entryForm(entry ?? review?.draft ?? {}));
   const [errors, setErrors] = useState<FormErrors>({});
   const [reviewBusy, setBusy] = useState(false);
   const [creatingCategory, setCreatingCategory] = useState(false);
-  const busy = reviewBusy || creatingCategory;
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [checkingDelete, setCheckingDelete] = useState(false);
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  const busy = reviewBusy || creatingCategory || deleting;
   const [currencyConfirmed, setCurrencyConfirmed] = useState(false);
   const [message, setMessage] = useState("");
   const [mustReload, setMustReload] = useState(false);
@@ -49,7 +55,7 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
       active.current = false; request.current?.abort();
       // Wait for the saved row and pagination updates to finish before restoring focus.
       requestAnimationFrame(() => {
-        if (opener instanceof HTMLElement && opener.isConnected && opener.tabIndex >= 0) opener.focus();
+        if (!removed.current && opener instanceof HTMLElement && opener.isConnected && opener.tabIndex >= 0) opener.focus();
         else document.getElementById(focusTargetId)?.focus();
       });
     };
@@ -63,7 +69,14 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
   useEffect(() => {
     if (message) { setPane("details"); detailsPane.current?.scrollTo({ top: 0 }); }
   }, [message]);
-  const close = () => { if (!busy && (!dirty || window.confirm("Discard your unsaved changes?"))) onClose(); };
+  useEffect(() => { if (confirmDelete) keepButton.current?.focus(); }, [confirmDelete]);
+  const close = () => {
+    if (busy) return;
+    if (confirmDelete) {
+      setConfirmDelete(false);
+      requestAnimationFrame(() => deleteButton.current?.focus());
+    } else if (!dirty || window.confirm("Discard your unsaved changes?")) onClose();
+  };
   const addCategory = async (name: string) => {
     setCreatingCategory(true);
     const controller = new AbortController();
@@ -85,7 +98,16 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
       if (active.current) setCreatingCategory(false);
     }
   };
-  const reload = async () => {
+  const finishRemoval = async (id: string, confirmed: boolean) => {
+    const keys = ["ledger", "ledger-detail", "receipts", "receipt-detail", "review"];
+    await Promise.all(keys.map((key) => qc.cancelQueries({ queryKey: [key, account] })));
+    if (!active.current || qc.getQueryData<{ email: string } | null>(["me"])?.email !== account) return;
+    removed.current = true;
+    qc.removeQueries({ queryKey: ["ledger-detail", account, id], exact: true });
+    for (const key of keys) void qc.invalidateQueries({ queryKey: [key, account] });
+    onRemoved(confirmed);
+  };
+  const reload = async (afterDelete = checkingDelete) => {
     setBusy(true); setLatest(null); setCanRetryCreate(false);
     request.current = new AbortController();
     try {
@@ -108,8 +130,32 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
     } catch (e) {
       if (!active.current) return;
       if (e instanceof ApiError && e.status === 401) clearSession(qc);
+      else if (afterDelete && base && e instanceof ApiError && e.status === 404) await finishRemoval(base.id, false);
       else setMessage("Couldn't reload the saved state. Your draft is retained. Try loading it again.");
     } finally { if (active.current) setBusy(false); }
+  };
+  const remove = async () => {
+    if (!base || busy || mustReload) return;
+    setDeleting(true);
+    setMessage("");
+    const controller = new AbortController();
+    request.current = controller;
+    try {
+      await deleteLedgerEntry(base.id, base.updated_at, controller.signal);
+      if (active.current) await finishRemoval(base.id, true);
+    } catch (e) {
+      if (!active.current) return;
+      if (e instanceof ApiError && e.status === 401) { clearSession(qc); return; }
+      setConfirmDelete(false);
+      setCheckingDelete(true);
+      setMustReload(true);
+      setMessage(e instanceof ApiError && e.code === "entry_changed"
+        ? "This expense changed in another tab. Check the latest saved values before confirming deletion again."
+        : e instanceof ApiError && e.code === "receipt_busy"
+          ? "This receipt is still processing. Check the saved state again when it finishes."
+          : "Couldn't confirm the deletion. Your draft is retained while we check the saved state.");
+      await reload(true);
+    } finally { if (active.current) setDeleting(false); }
   };
   const save = async () => {
     setPane("details");
@@ -139,7 +185,7 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
   };
   return <dialog ref={dialog} aria-labelledby="editor-title" onCancel={(e) => { e.preventDefault(); close(); }}
     className="fixed inset-0 m-auto h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/60 lg:h-[92dvh] lg:w-[94vw] lg:max-w-7xl lg:rounded-xl lg:border lg:border-slate-200 dark:bg-slate-900 dark:text-slate-100 lg:dark:border-slate-700">
-    <form noValidate onSubmit={(e) => { e.preventDefault(); if (!busy && !mustReload) void save(); }} className="flex h-full min-h-0 flex-col">
+    <form noValidate onSubmit={(e) => { e.preventDefault(); if (!busy && !mustReload && !confirmDelete) void save(); }} className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
         <div className="min-w-0">
           <h2 id="editor-title" className="text-lg font-semibold">Review expense</h2>
@@ -170,11 +216,11 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
               <LatestValues entry={latest} />
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={editorButton} disabled={busy} onClick={() => {
-                  setBase(latest); setCurrencyConfirmed(false); setMustReload(false); setLatest(null); setMessage("Latest version loaded. Check your retained draft, then save.");
+                  setBase(latest); setCurrencyConfirmed(false); setMustReload(false); setLatest(null); setCheckingDelete(false); setMessage("Latest version loaded. Your draft is still here.");
                 }}>Keep my draft against this version</button>
                 <button type="button" className={editorButton} disabled={busy} onClick={() => {
                   if (dirty && !window.confirm("Replace your draft with the latest saved values?")) return;
-                  setBase(latest); setForm(entryForm(latest)); setErrors({}); setCurrencyConfirmed(false); setMustReload(false); setLatest(null); setMessage("");
+                  setBase(latest); setForm(entryForm(latest)); setErrors({}); setCurrencyConfirmed(false); setMustReload(false); setLatest(null); setCheckingDelete(false); setMessage("");
                 }}>Use latest saved values</button>
               </div>
             </> : <p>{canRetryCreate ? "The receipt is still awaiting review. Check your draft before retrying." : "Reload the saved state before retrying. Your draft will stay here."}</p>}
@@ -184,7 +230,7 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
             <button type="button" className={editorButton} disabled={busy} onClick={() => void reload()}>{busy ? "Loading…" : "Load latest saved state"}</button>
           </div>}
           {categories.isError && <p role="alert" className="text-sm">Couldn't load categories. <button type="button" className="underline" onClick={() => void categories.refetch()}>Retry categories</button></p>}
-          <fieldset disabled={busy || categories.isPending || categories.isError} className="space-y-4">
+          <fieldset disabled={busy || confirmDelete || categories.isPending || categories.isError} className="space-y-4">
             <legend className="sr-only">Expense fields</legend>
             <EntryFields form={form} errors={errors} categories={categories.data ?? []}
               categoryAction={<CategoryCreate onCreate={addCategory} onSessionExpired={() => clearSession(qc)} />} setForm={(next) => {
@@ -199,11 +245,25 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, focusTar
         </div>
       </div>
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900">
-        <p className="text-xs text-slate-500 dark:text-slate-400" role="status">{creatingCategory ? "Creating category…" : reviewBusy ? "Saving your review…" : dirty ? "You have unsaved changes" : "Ready to confirm these details"}</p>
-        <div className="ml-auto flex items-center gap-2">
-          <button type="button" className={editorButton} disabled={busy} onClick={close}>Cancel</button>
-          <button className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50" disabled={busy || mustReload || categories.isPending || categories.isError}>{reviewBusy ? "Saving…" : "Save review"}</button>
-        </div>
+        {confirmDelete ? <div role="group" aria-labelledby="delete-expense-title" aria-describedby="delete-expense-effect" className="flex w-full flex-wrap items-center justify-between gap-2">
+          <div>
+            <p id="delete-expense-title" className="text-sm font-semibold">Permanently delete this expense?</p>
+            <p id="delete-expense-effect" className="text-sm text-slate-600 dark:text-slate-400">This removes the expense from your ledger and totals.{receiptId && " The original receipt stays in Google Drive."}{dirty && " Unsaved changes will be discarded."}</p>
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button ref={keepButton} type="button" className={editorButton} disabled={busy} onClick={close}>Keep expense</button>
+            <button type="button" className="min-h-11 rounded-md bg-red-700 px-4 text-sm font-semibold text-white hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-50"
+              disabled={busy} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete permanently"}</button>
+          </div>
+        </div> : <>
+          {base && <button ref={deleteButton} type="button" className={`${editorButton} text-red-700 dark:text-red-300`} disabled={busy || mustReload}
+            onClick={() => setConfirmDelete(true)}>Delete expense</button>}
+          <p className="text-xs text-slate-500 dark:text-slate-400" role="status">{creatingCategory ? "Creating category…" : reviewBusy ? "Saving your review…" : dirty ? "You have unsaved changes" : "Ready to confirm these details"}</p>
+          <div className="ml-auto flex items-center gap-2">
+            <button type="button" className={editorButton} disabled={busy} onClick={close}>Cancel</button>
+            <button className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50" disabled={busy || mustReload || categories.isPending || categories.isError}>{reviewBusy ? "Saving…" : "Save review"}</button>
+          </div>
+        </>}
       </footer>
     </form>
   </dialog>;
