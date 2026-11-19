@@ -10,7 +10,7 @@ Carried over from the retired checklist. All need CI deployment to staging; reco
 
 - [ ] Verify dirty-close Cancel/Discard and live account switching/session expiry with an unsaved form (native-dialog automation stalled locally; see [M4.3 verification](./M4.3%20verification.md)).
 - [ ] Verify real M3 receipts, both users, upload/poll/retry regressions and route CPU against the 10 ms budget. Keep M3 and M4.2 staging sign-off separate.
-- [ ] Verify custom category creation (M4.4) with both accounts.
+- [ ] Verify custom category creation (M4.4) with both accounts; see [M4.4 verification](./M4.4%20verification.md).
 - [ ] Verify two-user isolation, upload-to-review-to-ledger, both review cases, exact money, time ordering, pagination, categories, deletion and a missing Drive original.
 - [ ] Confirm keyboard/mobile layouts and API failures stay recoverable, and that no receipt content or amounts appear in logs.
 - [ ] Confirm the migration, old rows (`reviewed_at` null) and route CPU in staging.
