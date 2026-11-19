@@ -9,6 +9,7 @@ import { checkOrigin, requireUser } from "./auth/middleware";
 import { authRoutes } from "./auth/routes";
 import { getDb } from "./db/client";
 import { devRoutes } from "./dev/routes";
+import { securityHeaders } from "./lib/security-headers";
 import type { Bindings } from "./env";
 import type { ReceiptMessage } from "./pipeline/message";
 import { runParkCron } from "./pipeline/cron";
@@ -20,6 +21,7 @@ const defaultDeps: AppDeps = { fetch: (input, init) => fetch(input, init) };
 export function createApp(deps: AppDeps = defaultDeps) {
   const app = new Hono<AppEnv>();
 
+  app.use("*", securityHeaders);
   app.use("*", async (c, next) => {
     c.set("deps", deps);
     c.set("db", getDb(c.env.DB));
