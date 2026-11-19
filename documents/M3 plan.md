@@ -81,4 +81,6 @@ Nov 11, 2026. Scope from the spec's milestones: queue consumer, validation, ledg
 
 After merge (staging deploy via CI): verify migration `0002` was applied before the new code (the deploy workflow runs migrations before Pulumi), and check consumer CPU time against the 10 ms limit in Workers observability.
 
+**Staging sign-off (November 19, 2026):** the user verified M3 on staging (upload, polling and retry, with the M4 checks) and reported it passed.
+
 Not in M3: ledger/categories API and UI, review form and saving (M4); resumable upload, limits banners (M5); quota guard (decision 5).

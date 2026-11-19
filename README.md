@@ -8,15 +8,15 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 
 ## Status
 
-**M4 (ledger UI) merged**: ledger browsing with currency-separated totals (M4.1), entry editing and confirmation (M4.2), the review inbox (M4.3), custom categories (M4.4) and entry deletion (M4.5). Staging sign-off for M3 and M4 remains open. Security hardening (response headers and CSP, `__Host-` cookies, capped Drive downloads, push-to-main guard) is merged. An SPA redesign (ledger dashboard with a side rail, date range presets, delete moved to the editor's header menu) is in review in PR #13. The Nov 16 eval re-run on 12 receipts passed date accuracy (91.7%) but missed total accuracy (83.3% versus 90%); both wrong totals were routed to review. Real accuracy will come from user corrections. Work follows the spec's milestones:
+**M4 (ledger UI) complete**: ledger browsing with currency-separated totals (M4.1), entry editing and confirmation (M4.2), the review inbox (M4.3), custom categories (M4.4) and entry deletion (M4.5). M3 and M4 were verified on staging on Nov 19, 2026. Security hardening (response headers and CSP, `__Host-` cookies, capped Drive downloads, push-to-main guard) is merged. An SPA redesign (ledger dashboard with a side rail, date range presets, delete moved to the editor's header menu) is merged (PR #13). The Nov 16 eval re-run on 12 receipts passed date accuracy (91.7%) but missed total accuracy (83.3% versus 90%); both wrong totals were routed to review. Real accuracy will come from user corrections. Work follows the spec's milestones:
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | M1 — Extraction spike | Worker + Workers AI only; 50-receipt eval; record accuracy and neurons/receipt | Passed provisionally on 10 receipts ([results](./documents/M1%20eval%20results.md)) |
 | M2 — Auth + Drive | Google sign-in, encrypted refresh tokens, Drive folder, upload | Done ([plan](./documents/M2%20plan.md)) |
-| M3 — Pipeline | Queue consumer, Zod validation, ledger writes, `ai_usage`, retries, quota parking (daily cron), status polling | Merged; staging verification open ([plan](./documents/M3%20plan.md)) |
-| **M4 — Ledger UI** | Category/month views, review & edit, categories, delete | Merged; staging sign-off open ([verification](./documents/M4.1%20verification.md)) |
-| M5 — Hardening & prod | CI/CD, prod env, limit banners, privacy policy, OAuth consent published | Next |
+| M3 — Pipeline | Queue consumer, Zod validation, ledger writes, `ai_usage`, retries, quota parking (daily cron), status polling | Done; verified on staging ([plan](./documents/M3%20plan.md)) |
+| M4 — Ledger UI | Category/month views, review & edit, categories, delete | Done; verified on staging ([plan](./documents/M4%20plan.md)) |
+| **M5 — Hardening & prod** | CI/CD, prod env, limit banners, privacy policy, OAuth consent published | Next |
 
 ## Stack
 
