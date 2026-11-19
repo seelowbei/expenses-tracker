@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { ReceiptListItem } from "../../worker/src/contracts/review";
 import { ApiError, getMe, listReceipts, logout, retryReceipt, uploadReceipt, type Me, type Receipt } from "./api";
@@ -34,15 +34,18 @@ export function App() {
   }, [qc, me.isSuccess, me.data?.email]);
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-6">
-      <header className="mb-8 flex items-center gap-3">
-        <img src="/logo.svg" alt="" className="size-9" />
-        <h1 className="text-lg font-semibold">Expense Tracker</h1>
-        {me.data && <Account me={me.data} />}
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+          <img src="/logo.svg" alt="" className="size-8" />
+          <h1 className="text-base font-semibold">Expense Tracker</h1>
+          {me.data && <Account me={me.data} />}
+        </div>
       </header>
 
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-5 sm:py-6">
       {notice && (
-        <p role="alert" className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+        <p role="alert" className="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
           {notice}
         </p>
       )}
@@ -56,6 +59,7 @@ export function App() {
       ) : (
         <SignIn />
       )}
+      </div>
     </div>
   );
 }
@@ -63,11 +67,9 @@ export function App() {
 function SignIn() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-      <p className="max-w-sm text-slate-600 dark:text-slate-400">Upload receipts; they're saved to your Google Drive and added to your ledger.</p>
-      <a
-        href="/auth/google"
-        className="rounded-lg bg-teal-700 px-5 py-2.5 font-medium text-white shadow-sm hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
-      >
+      <img src="/logo.svg" alt="" className="size-16" />
+      <p className="muted max-w-sm">Upload receipts; they're saved to your Google Drive and added to your ledger.</p>
+      <a href="/auth/google" className="btn btn-primary px-5">
         Sign in with Google
       </a>
     </main>
@@ -79,8 +81,8 @@ function Account({ me }: { me: Me }) {
   const out = useMutation({ mutationFn: logout, onSettled: () => clearSession(qc) });
   return (
     <div className="ml-auto flex items-center gap-3 text-sm">
-      <span className="hidden text-slate-600 sm:inline dark:text-slate-400">{me.name ?? me.email}</span>
-      <button onClick={() => out.mutate()} disabled={out.isPending} className="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800">
+      <span className="muted hidden sm:inline">{me.name ?? me.email}</span>
+      <button onClick={() => out.mutate()} disabled={out.isPending} className="btn">
         Sign out
       </button>
     </div>
@@ -149,66 +151,101 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
   }
 
   return (
-    <main className="flex flex-col gap-8">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="mb-1 font-medium">Add receipts</h2>
-        <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
-          JPG, PNG, HEIC or PDF.{" "}
-          {me.driveFolderLink ? (
-            <a href={me.driveFolderLink} target="_blank" rel="noreferrer" className="text-teal-700 underline dark:text-teal-400">
-              Open Drive folder
-            </a>
-          ) : (
-            "Files go to “Expense Receipts” in your Drive."
-          )}
-        </p>
-        <label className="inline-flex cursor-pointer items-center rounded-lg bg-teal-700 px-4 py-2 font-medium text-white hover:bg-teal-800 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-teal-700">
-          Choose files
-          <input
-            ref={input}
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif,application/pdf"
-            className="sr-only"
-            onChange={(e) => void handleFiles(e.target.files)}
-          />
-        </label>
-        {uploads.length > 0 && (
-          <ul className="mt-4 space-y-1 text-sm">
-            {uploads.map((u, i) => (
-              <li key={i} className="flex justify-between gap-3">
-                <span className="truncate">{u.name}</span>
-                <span className={u.state === "error" ? "text-red-600" : u.state === "done" ? "text-teal-700 dark:text-teal-400" : "text-slate-500"}>
-                  {u.state === "error" ? u.message : u.state === "done" ? "Saved" : u.state === "uploading" ? "Uploading…" : "Preparing…"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <ReviewInbox account={me.email} revision={reviewRevision} onSaved={reviewed} />
-      <LedgerView account={me.email} onReviewed={reviewed} />
-
-      <section>
-        <h2 className="mb-3 font-medium">Recent receipts</h2>
-        {receipts.isError && receipts.data && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">Couldn't refresh receipts. Showing the last known status. <button className="underline" onClick={() => void receipts.refetch()}>Retry</button></p>}
-        {receipts.isPending ? (
-          <p className="text-sm text-slate-500">Loading…</p>
-        ) : !receipts.data ? (
-          <p className="text-sm text-red-600">Couldn't load receipts.</p>
-        ) : receipts.data.length === 0 ? (
-          <p className="text-sm text-slate-500">No receipts yet.</p>
-        ) : (
-          <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-            {receipts.data.map((r) => (
-              <ReceiptRow key={r.id} r={r} />
-            ))}
-          </ul>
-        )}
-      </section>
+    <main className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+      <div className="flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-1">
+        <ReviewInbox account={me.email} revision={reviewRevision} onSaved={reviewed} />
+        <UploadCard me={me} input={input} uploads={uploads} onFiles={(files) => void handleFiles(files)} />
+        <RecentReceipts receipts={receipts} />
+      </div>
+      <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+        <LedgerView account={me.email} onReviewed={reviewed} />
+      </div>
     </main>
   );
+}
+
+const ACCEPT = "image/jpeg,image/png,image/heic,image/heif,.heic,.heif,application/pdf";
+
+function UploadCard({ me, input, uploads, onFiles }: {
+  me: Me; input: React.RefObject<HTMLInputElement | null>; uploads: UploadState[]; onFiles: (files: FileList | null) => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  return (
+    <section aria-labelledby="upload-heading" className="card">
+      <label
+        className={`flex cursor-pointer flex-col items-center gap-1 rounded-lg border-2 border-dashed px-4 py-5 text-center text-sm focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-teal-700 ${dragging ? "border-teal-600 bg-teal-50 dark:bg-teal-950" : "border-slate-300 hover:border-teal-600 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"}`}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); onFiles(e.dataTransfer.files); }}
+      >
+        <UploadIcon />
+        <h2 id="upload-heading" className="font-semibold">
+          <span className="lg:hidden">Add receipts</span><span className="hidden lg:inline">Drop receipts here</span>
+        </h2>
+        <span className="muted">JPG, PNG, HEIC or PDF · <span className="text-teal-700 underline underline-offset-4 dark:text-teal-400">choose files</span></span>
+        <input ref={input} type="file" multiple accept={ACCEPT} className="sr-only" onChange={(e) => onFiles(e.target.files)} />
+      </label>
+      {uploads.length > 0 && (
+        <ul className="mt-3 divide-y divide-slate-200 text-sm dark:divide-slate-800">
+          {uploads.map((u, i) => (
+            <li key={i} className="flex items-center justify-between gap-3 py-2">
+              <span className="min-w-0 truncate">{u.name}</span>
+              <span className={u.state === "error" ? "pill pill-red" : u.state === "done" ? "pill pill-teal" : "pill pill-blue"}>
+                {u.state === "error" ? u.message : u.state === "done" ? "Saved" : u.state === "uploading" ? "Uploading…" : "Preparing…"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-xs">
+        {me.driveFolderLink ? <a href={me.driveFolderLink} target="_blank" rel="noreferrer" className="link">Open Drive folder</a>
+          : <span className="muted">Files go to “Expense Receipts” in your Drive.</span>}
+      </p>
+    </section>
+  );
+}
+
+const RECENT_COUNT = 4;
+
+function RecentReceipts({ receipts }: { receipts: UseQueryResult<ReceiptListItem[]> }) {
+  const [expanded, setExpanded] = useState(false);
+  const data = receipts.data;
+  const working = data?.filter(isWorking).length ?? 0;
+  const waiting = data?.filter((r) => r.status === "queued" && r.retryAfter).length ?? 0;
+  const failed = data?.filter((r) => r.status === "failed").length ?? 0;
+  const summary = [working && `${working} reading`, waiting && `${waiting} waiting`, failed && `${failed} failed`].filter(Boolean).join(" · ");
+  const shown = expanded ? data : data?.slice(0, RECENT_COUNT);
+  return (
+    <section aria-labelledby="receipts-heading" className="card">
+      <div className="card-title">
+        <h2 id="receipts-heading">Recent receipts</h2>
+        {summary && <span className="muted text-xs font-normal">{summary}</span>}
+      </div>
+      {receipts.isError && data && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">Couldn't refresh receipts. Showing the last known status. <button className="underline" onClick={() => void receipts.refetch()}>Retry</button></p>}
+      {receipts.isPending ? (
+        <p className="muted mt-2 text-sm">Loading…</p>
+      ) : !data ? (
+        <p className="mt-2 text-sm text-red-600">Couldn't load receipts.</p>
+      ) : data.length === 0 ? (
+        <p className="muted mt-2 text-sm">No receipts yet.</p>
+      ) : (
+        <>
+          <ul className={`mt-2 divide-y divide-slate-200 dark:divide-slate-800 ${expanded ? "" : "max-lg:hidden"}`}>
+            {shown!.map((r) => <ReceiptRow key={r.id} r={r} />)}
+          </ul>
+          {(data.length > RECENT_COUNT || !expanded) && (
+            <button className={`link mt-2 block w-full text-center text-sm ${data.length > RECENT_COUNT ? "" : "lg:hidden"}`} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+              {expanded ? "Show fewer" : <><span className="lg:hidden">Show receipts</span><span className="hidden lg:inline">Show all {data.length}</span></>}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function UploadIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="size-6 text-teal-700 dark:text-teal-400"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M12 4v12M7 9l5-5 5 5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
 const POLL_MS = 3000;
@@ -265,35 +302,32 @@ function ReceiptRow({ r }: { r: ReceiptListItem }) {
   const retryError =
     retry.error instanceof ApiError && retry.error.code === "reupload_required" ? "Upload the file again" : retry.error ? "Retry failed" : null;
   return (
-    <li className="grid gap-x-4 gap-y-2 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div className="min-w-0">
-        <div>{when}</div>
-        <div className="text-slate-500">
-          {type} · {Math.max(1, Math.round(r.sizeBytes / 1024))} KB
+    <li className="py-2.5 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div>{when}</div>
+          <div className="muted text-xs">{detail ?? `${type} · ${Math.max(1, Math.round(r.sizeBytes / 1024))} KB`}</div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span className={STATUS_PILL[tone(r)]}>{label}</span>
+          {r.driveLink && <div className="flex items-center gap-3">
+            {canRetry && <button onClick={() => retry.mutate()} disabled={retry.isPending} className="btn">Retry</button>}
+            <a href={r.driveLink} target="_blank" rel="noreferrer" className="link inline-flex min-h-11 items-center text-xs sm:min-h-0">View</a>
+          </div>}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:justify-end">
-        <div className={r.status === "failed" ? "text-red-600" : r.status === "needs_review" ? "text-amber-700 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"}>
-          {label}
-        </div>
-        {r.driveLink && <div className="ml-auto flex shrink-0 items-center gap-3 sm:ml-0">
-          {canRetry && (
-            <button
-              onClick={() => retry.mutate()}
-              disabled={retry.isPending}
-              className="min-h-11 rounded-md border border-slate-300 px-3 py-2 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
-            >
-              Retry
-            </button>
-          )}
-          <a href={r.driveLink} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-teal-700 underline dark:text-teal-400">
-            View
-          </a>
-        </div>}
-      </div>
-      {(retryError ?? detail) && <p className="min-w-0 break-words text-xs text-slate-500 sm:col-span-2">{retryError ?? detail}</p>}
+      {retryError && <p className="mt-1 text-xs text-red-700 dark:text-red-300">{retryError}</p>}
     </li>
   );
+}
+
+const STATUS_PILL = { working: "pill pill-blue", waiting: "pill pill-slate", done: "pill pill-teal", review: "pill pill-amber", failed: "pill pill-red" };
+
+function tone(r: ReceiptListItem): keyof typeof STATUS_PILL {
+  if (r.status === "failed") return "failed";
+  if (r.status === "needs_review") return "review";
+  if (r.status === "done") return r.hasLedgerEntry === false ? "waiting" : "done";
+  return r.status === "queued" && r.retryAfter ? "waiting" : "working";
 }
 
 function uploadMessage(e: unknown): string {

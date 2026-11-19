@@ -4,8 +4,8 @@ import { CurrencySelect } from "./CurrencySelect";
 import { SelectControl } from "./SelectControl";
 import type { EntryForm, FormErrors } from "./form";
 
-export const editorControl = "min-h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900";
-export const editorButton = "min-h-11 rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50 dark:border-slate-600";
+export const editorControl = "field w-full min-w-0";
+export const editorButton = "btn";
 
 export function EntryFields({ form, setForm, errors, categories, categoryAction }: {
   form: EntryForm; setForm: (form: EntryForm) => void; errors: FormErrors; categories: CategoryDto[]; categoryAction: ReactNode;

@@ -248,7 +248,7 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button ref={keepButton} type="button" className={editorButton} disabled={busy} onClick={close}>Keep expense</button>
-            <button type="button" className="min-h-11 rounded-md bg-red-700 px-4 text-sm font-semibold text-white hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-50"
+            <button type="button" className="btn btn-danger"
               disabled={busy} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete permanently"}</button>
           </div>
         </div> : <>
@@ -257,7 +257,7 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
           <p className="text-xs text-slate-500 dark:text-slate-400" role="status">{creatingCategory ? "Creating category…" : reviewBusy ? "Saving your review…" : dirty ? "You have unsaved changes" : "Ready to confirm these details"}</p>
           <div className="ml-auto flex items-center gap-2">
             <button type="button" className={editorButton} disabled={busy} onClick={close}>Cancel</button>
-            <button className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50" disabled={busy || mustReload || categories.isPending || categories.isError}>{reviewBusy ? "Saving…" : "Save review"}</button>
+            <button className="btn btn-primary px-5" disabled={busy || mustReload || categories.isPending || categories.isError}>{reviewBusy ? "Saving…" : "Save review"}</button>
           </div>
         </>}
       </footer>
