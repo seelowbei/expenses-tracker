@@ -33,12 +33,28 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 | Tooling | pnpm workspaces, Wrangler, Vitest + `@cloudflare/vitest-plugin`, GitHub Actions |
 | Infrastructure | Pulumi (TypeScript, Pulumi Cloud state), `@pulumi/cloudflare` |
 
-```text
-Browser (SPA) ──► Worker fetch ──► Google Drive (save file)
-                       │                 ▲
-                       ▼                 │ download
-                 RECEIPT_QUEUE ──► Worker queue ──► Workers AI ──► D1 ledger
-```
+## How it works
+
+One Worker script does everything: `fetch` serves the SPA and API, `queue` runs extraction, and `scheduled` re-sends receipts parked by the daily AI quota. D1 holds the ledger; the receipt files stay in each user's Google Drive.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./documents/images/architecture-dark.svg">
+    <img alt="Architecture: the browser uploads to the Worker's fetch handler, which saves the file to Google Drive and enqueues it; the queue handler downloads the file, extracts it with Workers AI and writes the entry to D1." src="./documents/images/architecture-light.svg" width="840">
+  </picture>
+</p>
+
+1. **Sign in** with Google (OIDC + PKCE, `drive.file` scope only).
+2. **Upload** a photo or PDF. The browser converts HEIC and resizes images first, keeping the Worker under its 10 ms CPU limit.
+3. **Save** the file to the user's `Expense Receipts/` Drive folder. Drive is write-once: the app never edits or deletes files there.
+4. **Enqueue** `{ receiptId, userId }` on `RECEIPT_QUEUE`, and the API returns `202` right away.
+5. **Deliver** one message at a time to the `queue` handler.
+6. **Download** the file back from Drive.
+7. **Extract** merchant, date, totals and line items with Workers AI: one structured-output call, plus at most one repair call.
+8. **Write** the ledger entry to D1. Zod and the post-validation rules decide `done` or `needs_review`.
+9. **Poll** status from the SPA, then browse, review and edit the ledger.
+
+When a free-plan limit runs out, the request fails instead of being billed. Each failure leaves the receipt in a recoverable state: retries with backoff, quota parking until the daily cron, or `failed` with a retry button.
 
 ## Repo layout (planned)
 
