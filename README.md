@@ -138,8 +138,7 @@ Then fill in the values. The secrets guard (deny rules plus `.claude/hooks/prote
 ```bash
 pnpm install
 pnpm --filter worker db:migrate:local
-pnpm --filter web build        # or `pnpm --filter web dev` to rebuild on every change
-pnpm --filter worker dev
+pnpm dev                       # SPA rebuild-on-change + wrangler dev on :8787
 ```
 
 Use Chrome or Firefox locally: the session cookie is `Secure`, which Safari may drop on `http://localhost`. Schema changes: edit `worker/src/db/schema.ts`, run `pnpm --filter worker db:generate`, check the SQL in `worker/migrations/` is additive, then migrate.
