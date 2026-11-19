@@ -33,6 +33,9 @@ jobs:
       - name: Typecheck (worker + infrastructure)
         run: pnpm -r typecheck
 
+      - name: Agent hook tests
+        run: pnpm test:hooks
+
       - name: Test with coverage
         run: pnpm --filter worker coverage
 
