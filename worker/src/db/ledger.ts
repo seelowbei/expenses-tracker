@@ -13,6 +13,9 @@ const summary = {
 const categoryJoin = (userId: string) => and(eq(categories.id, ledger.categoryId), or(eq(categories.userId, userId), isNull(categories.userId)));
 const receiptJoin = (userId: string) => and(eq(receipts.id, ledger.receiptId), eq(receipts.userId, userId));
 
+const rangeWhere = (userId: string, q: LedgerFilters) =>
+  and(eq(ledger.userId, userId), gte(ledger.txnDate, q.from), lte(ledger.txnDate, q.to), q.category ? eq(ledger.categoryId, q.category) : undefined);
+
 function after(cursor: LedgerCursor | null) {
   if (!cursor) return undefined;
   const sameTime = cursor.time === null ? isNull(ledger.txnTime) : eq(ledger.txnTime, cursor.time);
@@ -26,7 +29,7 @@ function after(cursor: LedgerCursor | null) {
 }
 
 export async function readLedger(db: Db, userId: string, q: LedgerFilters & { cursor: LedgerCursor | null; limit: number }) {
-  const where = and(eq(ledger.userId, userId), gte(ledger.txnDate, q.from), lte(ledger.txnDate, q.to), q.category ? eq(ledger.categoryId, q.category) : undefined);
+  const where = rangeWhere(userId, q);
   const month = sql<string>`substr(${ledger.txnDate}, 1, 7)`;
   // D1 batch gives the page and its full-range aggregates one consistent read snapshot.
   return db.batch([
@@ -44,6 +47,20 @@ export async function readLedger(db: Db, userId: string, q: LedgerFilters & { cu
       .where(where).groupBy(ledger.categoryId, month, ledger.currency)
       .orderBy(desc(month), categories.name, ledger.categoryId, ledger.currency),
   ]);
+}
+
+export type LedgerExportRow = Awaited<ReturnType<typeof readLedgerExport>>[number];
+
+/** Every entry in the filtered range, in list order, with the fields a spreadsheet needs (no line items). */
+export function readLedgerExport(db: Db, userId: string, q: LedgerFilters, limit: number) {
+  return db.select({
+    id: ledger.id, category_name: categories.name, merchant: ledger.merchant, txn_date: ledger.txnDate, txn_time: ledger.txnTime,
+    currency: ledger.currency, total_minor: ledger.totalMinor, tax_minor: ledger.taxMinor, payment_method: ledger.paymentMethod,
+    notes: ledger.notes, source: ledger.source, reviewed_at: ledger.reviewedAt,
+    receipt_status: receipts.status, drive_link: receipts.driveLink,
+  }).from(ledger).innerJoin(categories, categoryJoin(userId)).leftJoin(receipts, receiptJoin(userId))
+    .where(rangeWhere(userId, q))
+    .orderBy(desc(ledger.txnDate), desc(ledger.txnTime), desc(ledger.id)).limit(limit);
 }
 
 export function readLedgerDetail(db: Db, userId: string, id: string) {

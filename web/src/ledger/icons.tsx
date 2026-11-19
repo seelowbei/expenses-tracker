@@ -10,3 +10,4 @@ export const ExternalIcon = () => <svg {...base} className="size-4"><path d="M12
 export const MoreIcon = () => <svg {...base} className="size-4"><path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth={3} /></svg>;
 export const TrashIcon = () => <svg {...base} className="size-4"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>;
 export const AlertIcon = () => <svg {...base} className="size-5"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>;
+export const DownloadIcon = () => <svg {...base} className="size-4"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>;

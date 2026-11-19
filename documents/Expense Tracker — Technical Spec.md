@@ -24,7 +24,7 @@ A web app where users sign in with Google, upload a receipt (image or PDF), and 
 **Out of scope (v1)**
 
 - Writing to Google Sheets
-- Multi-currency conversion, budgets, reports, exports
+- Multi-currency conversion, budgets, reports, exports other than the ledger CSV download
 - Native mobile apps (the web app should still work on mobile)
 
 **Constraints**
@@ -307,6 +307,7 @@ All `/api/*` routes need a valid session cookie and are scoped to the session's 
 | POST | `/api/receipts/:id/review` | Create a missing entry and complete invalid-output review | 201 / 409 |
 | POST | `/api/receipts/:id/retry` | Re-enqueue a failed receipt that still has its Drive file | 202 / 409 `not_retryable` / 409 `reupload_required` |
 | GET | `/api/ledger?from=&to=&category=` | Entries + totals by category/month | 200 |
+| GET | `/api/ledger/export?from=&to=&category=` | CSV download of every entry in the filtered range | 200 `text/csv` / 422 `export_too_large` |
 | PATCH | `/api/ledger/:id` | Edit fields / category | 200 |
 | DELETE | `/api/ledger/:id` | Delete entry (the Drive file is kept) | 204 |
 | GET / POST | `/api/categories` | List / add categories | 200 / 201 |
@@ -314,6 +315,14 @@ All `/api/*` routes need a valid session cookie and are scoped to the session's 
 The UI polls `GET /api/receipts?status=queued,processing` every 3 s while anything is pending, and stops when nothing is.
 
 Ledger entries carry `txn_time` (`"HH:MM"` or `null`). `GET /api/ledger` orders entries by `txn_date` then `txn_time` (entries without a time last within their day), and `PATCH /api/ledger/:id` accepts `txn_time` (`"HH:MM"` or `null`) like any other field. AI usage has no API in v1; it is stored for later reporting and queried with `wrangler d1 execute` until then.
+
+### Ledger CSV export (November 19, 2026)
+
+`GET /api/ledger/export` takes the same `from`/`to`/`category` filters and validation as `GET /api/ledger` (12-calendar-month limit, current UTC month when both dates are omitted, 404 for an inaccessible category) and rejects `cursor`/`limit` with `400 invalid_filters`, because an export always covers the whole filtered range. It returns at most 5,000 rows; a larger range returns `422 export_too_large` with `max_rows` instead of a truncated file. Unsafe integer amounts return `422 amount_out_of_range`. The route makes no Drive or AI calls.
+
+The body is UTF-8 CSV with a BOM and CRLF line endings, sent as `attachment; filename="ledger-<from>-to-<to>.csv"` with `private, no-store`. Rows follow list order. Columns: `date, time, merchant, category, currency, total, tax, payment_method, status, source, reviewed_at, notes, receipt_link, entry_id`. Amounts are exact decimal strings from minor units using the currency exponent, without grouping or FX conversion; every row carries its own currency. `status` is `needs_review` when the linked receipt awaits review, otherwise `confirmed`. Line items are omitted. Free-text cells starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'` so spreadsheets do not run receipt-derived text as formulas.
+
+The ledger toolbar's download button exports the selected range and category, not just the loaded page, and shows an inline error on failure.
 
 ### M4.5 ledger deletion
 
