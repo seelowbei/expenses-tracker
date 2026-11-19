@@ -98,7 +98,7 @@ infrastructure/
 
 **Google Cloud**
 
-1. Configure the OAuth consent screen (External). Scopes: `openid`, `email`, `profile`, `https://www.googleapis.com/auth/drive.file`. Add both accounts as test users while building; publish to **In production** before daily use (avoids Testing mode's 7-day refresh-token expiry).
+1. Configure the OAuth consent screen (External). Scopes: `openid`, `email`, `profile`, `https://www.googleapis.com/auth/drive.file`. Add both accounts as test users and keep the app in **Testing** mode: the test-user list is what limits who can sign in. Testing mode expires refresh tokens after 7 days, so expect a weekly Drive reconnect.
 2. Create two OAuth Web clients (dev, prod) with redirect URIs:
    - `http://localhost:8787/auth/google/callback` (dev)
    - `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` (dev)
@@ -126,7 +126,7 @@ Local config comes from two git-ignored files. Each has a committed template lis
 | File | Template | Read by | Holds | Needed from |
 | --- | --- | --- | --- | --- |
 | `worker/.env` | [`worker/.env.sample`](./worker/.env.sample) | Wrangler CLI | `CLOUDFLARE_API_TOKEN` (the **dev token**, see [Cloudflare tokens](#cloudflare-tokens)) | M1 |
-| `worker/.dev.vars` | [`worker/.dev.vars.sample`](./worker/.dev.vars.sample) | The local Worker | Google OAuth client, `TOKEN_ENC_KEY`, `SESSION_SECRET`, `ALLOWED_EMAILS` | M2 |
+| `worker/.dev.vars` | [`worker/.dev.vars.sample`](./worker/.dev.vars.sample) | The local Worker | Google OAuth client, `TOKEN_ENC_KEY`, `SESSION_SECRET` | M2 |
 
 ```bash
 cp worker/.env.sample worker/.env

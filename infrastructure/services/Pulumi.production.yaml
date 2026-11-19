@@ -13,5 +13,3 @@ config:
     secure: AAABAGQNy473CwVqzE82TRGXmbdTJcFf5jl5PZthc7z3Q1u2BhdOaCdt1AJCeu/5M3sRKVyPRUL3mp+ZA/NuyXzIex4YWfHSsWz34A==
   expense-services:tokenEncKey:
     secure: AAABAPSlFqnWj0+/SDfpHeUooeIliQCNX7LiymauM31e7qNnQz4J4K/SBlEImrQCPTOt+ha3Snpm36Y0Zm2YVTaJUjCyMmSq/gVl9Q==
-  expense-services:allowedEmails:
-    secure: AAABAIv2e15TAqzIlq12KOvWfCvvLgfBYw/TsTxc6+2ZqmnVEBwxdJun3dl3rNd474R1

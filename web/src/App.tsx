@@ -8,7 +8,6 @@ import { LedgerView } from "./ledger/LedgerView";
 import { clearSession } from "./query-client";
 
 const SIGN_IN_ERRORS: Record<string, string> = {
-  not_allowed: "This Google account isn't allowed to use the app.",
   access_denied: "Sign-in was cancelled.",
   drive_scope_missing: "Google Drive access is needed to store receipts. Sign in again and keep the Drive box ticked.",
   no_refresh_token: "Google didn't grant offline access. Remove the app at myaccount.google.com/permissions and sign in again.",
@@ -140,7 +139,7 @@ function Home({ me, onSignedOut }: { me: Me; onSignedOut: (msg: string) => void 
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           clearSession(qc);
-          onSignedOut(SIGN_IN_ERRORS[e.code === "drive_disconnected" || e.code === "not_allowed" ? e.code : "auth_expired"]!);
+          onSignedOut(SIGN_IN_ERRORS[e.code === "drive_disconnected" ? e.code : "auth_expired"]!);
           return;
         }
         setState(i, { state: "error", message: uploadMessage(e) });

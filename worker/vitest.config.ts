@@ -22,7 +22,6 @@ export default defineConfig(async () => {
             // 32 zero bytes / 32 0x01 bytes, base64. Test-only keys.
             TOKEN_ENC_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
             SESSION_SECRET: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
-            ALLOWED_EMAILS: "alice@example.com, Bob@Example.com",
           },
         },
       }),

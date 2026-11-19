@@ -7,7 +7,6 @@ interface __BaseEnv_Env {
 	GOOGLE_CLIENT_SECRET: string;
 	TOKEN_ENC_KEY: string;
 	SESSION_SECRET: string;
-	ALLOWED_EMAILS: string;
 	RECEIPT_QUEUE?: Queue;
 	AI?: Ai;
 	APP_ORIGIN?: "http://localhost:8787";
@@ -24,7 +23,6 @@ declare namespace Cloudflare {
 		GOOGLE_CLIENT_SECRET: string;
 		TOKEN_ENC_KEY: string;
 		SESSION_SECRET: string;
-		ALLOWED_EMAILS: string;
 	}
 	interface ProductionEnv {
 		DB: D1Database;
@@ -32,7 +30,6 @@ declare namespace Cloudflare {
 		GOOGLE_CLIENT_SECRET: string;
 		TOKEN_ENC_KEY: string;
 		SESSION_SECRET: string;
-		ALLOWED_EMAILS: string;
 	}
 	interface Env extends __BaseEnv_Env {}
 }
@@ -41,7 +38,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "TOKEN_ENC_KEY" | "SESSION_SECRET" | "ALLOWED_EMAILS" | "APP_ORIGIN" | "DEFAULT_CURRENCY" | "DEV_ROUTES">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "TOKEN_ENC_KEY" | "SESSION_SECRET" | "APP_ORIGIN" | "DEFAULT_CURRENCY" | "DEV_ROUTES">> {}
 }
 declare module "*.txt" {
 	const value: string;
