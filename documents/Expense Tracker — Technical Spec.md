@@ -315,6 +315,14 @@ The UI polls `GET /api/receipts?status=queued,processing` every 3 s while anythi
 
 Ledger entries carry `txn_time` (`"HH:MM"` or `null`). `GET /api/ledger` orders entries by `txn_date` then `txn_time` (entries without a time last within their day), and `PATCH /api/ledger/:id` accepts `txn_time` (`"HH:MM"` or `null`) like any other field. AI usage has no API in v1; it is stored for later reporting and queried with `wrangler d1 execute` until then.
 
+### M4.5 ledger deletion
+
+`DELETE /api/ledger/:id` accepts a strict JSON object containing only `expected_updated_at`, the millisecond UTC ISO timestamp from the loaded entry. It uses the existing 32 KiB streamed-body limit, session and Origin checks, and standard JSON body errors. Success returns 204. Missing or inaccessible entries and associated receipts return 404 `not_found`, including a repeated delete. A stale version returns 409 `entry_changed`. Associated receipts in states other than `done` or `needs_review` return 409 `receipt_busy`. Entries without an associated receipt can be deleted.
+
+A version-guarded D1 batch deletes only the owned ledger row. If the deletion succeeds and the associated receipt was awaiting review, the same batch sets the receipt to `done` and clears its active error and retry time. The receipt, hash, Drive link, extracted evidence, original review reasons and AI usage are retained. The delete path makes no Drive or AI calls. The retained terminal receipt prevents stale review submissions, delayed queue deliveries and duplicate uploads from recreating the entry. Existing duplicate detection still applies.
+
+The editor asks for confirmation and explains that deletion is permanent and removes the expense from the ledger and totals while keeping the Drive file. On stale or uncertain results it preserves the draft and checks the current server state. Success refreshes ledger and receipt queries for the active account. The receipt list includes `hasLedgerEntry` derived from the owned ledger association. A completed receipt without an entry displays “No ledger entry” and has no review action.
+
 ### M4.4 custom categories
 
 `POST /api/categories` accepts a strict JSON object with a single `name` field (1–60 UTF-16 code units after trimming, with no control characters). It uses the existing 32 KiB streamed-body limit, session and Origin checks, and standard body errors. Success returns `201 { category: { id, slug, name } }`. The server generates the ID and assigns ownership from the session.

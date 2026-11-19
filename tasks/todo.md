@@ -340,6 +340,13 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 
 **Dependencies:** Tasks 7–9. **Scope:** Medium.
 
+**M4.5 increments**
+
+- [x] Record the body, version precondition, status codes and terminal receipt behavior in the technical spec.
+- [ ] Implement and verify atomic deletion, including races, rollback and attempts to recreate the entry.
+- [ ] Add editor confirmation and recovery, then verify account-scoped refresh of totals and pending review.
+- [ ] Show “No ledger entry” on retained completed receipts and run the local milestone checks in Task 12.
+
 **Likely files:** `worker/src/api/ledger.ts`, `worker/src/db/ledger.ts`, `worker/test/ledger-delete.test.ts`, `web/src/api.ts`, `web/src/ledger/EntryEditor.tsx`.
 
 ## Task 12 — Verify and document the milestone
