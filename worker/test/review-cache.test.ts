@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAppQueryClient, clearSession } from "../../web/src/query-client";
-import { syncReviewedEntry } from "../../web/src/ledger/review-cache";
+import { syncRemovedEntry, syncReviewedEntry } from "../../web/src/ledger/review-cache";
 import type { LedgerDetail } from "../src/contracts/ledger";
 
 const account = "alice@example.com";
@@ -19,7 +19,7 @@ describe("confirmed review cache update", () => {
     client.setQueryData(["receipts", account], [receipt, { ...receipt, id: "other" }]);
     client.setQueryData(["receipts", "bob@example.com"], [receipt]);
     expect(await syncReviewedEntry(client, account, entry)).toBe(true);
-    expect(client.getQueryData(["receipts", account])).toEqual([{ ...receipt, status: "done" }, { ...receipt, id: "other" }]);
+    expect(client.getQueryData(["receipts", account])).toEqual([{ ...receipt, status: "done", hasLedgerEntry: true }, { ...receipt, id: "other" }]);
     expect(client.getQueryData(["receipts", "bob@example.com"])).toEqual([receipt]);
     expect(client.getQueryData(["ledger-detail", account, "e"])).toEqual(entry);
     client.clear();
@@ -32,7 +32,7 @@ describe("confirmed review cache update", () => {
     const pending = client.fetchQuery({ queryKey: ["receipts", account], queryFn: () => new Promise<Receipt[]>((resolve) => { finish = resolve; }) });
     await syncReviewedEntry(client, account, entry);
     finish([receipt]); await pending.catch(() => undefined);
-    expect(client.getQueryData(["receipts", account])).toEqual([{ ...receipt, status: "done" }]);
+    expect(client.getQueryData(["receipts", account])).toEqual([{ ...receipt, status: "done", hasLedgerEntry: true }]);
     client.clear();
   });
   it("removes saved receipts from every review page and cancels stale detail/page responses", async () => {
@@ -76,4 +76,30 @@ describe("confirmed review cache update", () => {
     expect(client.getQueryData(["ledger-detail", account, "e"])).toBeUndefined();
     client.clear();
   });
+});
+
+it("refreshes only the deleting account and removes stale receipt associations", async () => {
+  const client = createAppQueryClient();
+  const rows = [{ ...receipt, hasLedgerEntry: true }];
+  const page = { receipts: rows, nextCursor: null };
+  const detail = { receipt, entryId: entry.id, draft: null };
+  client.setQueryData(["me"], { email: account });
+  client.setQueryData(["receipts", account], rows);
+  client.setQueryData(["receipts", "bob@example.com"], rows);
+  client.setQueryData(["review", account, "first"], page);
+  client.setQueryData(["receipt-detail", account, receipt.id], detail);
+  client.setQueryData(["ledger-detail", account, entry.id], entry);
+  let finish!: (value: typeof rows) => void;
+  const pending = client.fetchQuery({ queryKey: ["receipts", account], queryFn: () => new Promise<typeof rows>((resolve) => { finish = resolve; }) });
+  expect(await syncRemovedEntry(client, account, entry, true)).toBe(true);
+  finish(rows);
+  await pending.catch(() => undefined);
+  expect(client.getQueryData(["receipts", account])).toEqual([{ ...receipt, status: "done", hasLedgerEntry: false }]);
+  expect(client.getQueryData(["receipts", "bob@example.com"])).toEqual(rows);
+  expect(client.getQueryData(["review", account, "first"])).toEqual({ ...page, receipts: [] });
+  expect(client.getQueryData(["receipt-detail", account, receipt.id])).toMatchObject({ entryId: null, draft: null, receipt: { status: "done" } });
+  expect(client.getQueryData(["ledger-detail", account, entry.id])).toBeUndefined();
+  clearSession(client);
+  expect(await syncRemovedEntry(client, account, entry, true)).toBe(false);
+  client.clear();
 });

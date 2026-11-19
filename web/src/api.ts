@@ -48,7 +48,7 @@ export async function getMe(): Promise<Me | null> {
   }
 }
 
-export const listReceipts = (signal?: AbortSignal) => call<{ receipts: Receipt[] }>("/api/receipts", { signal }).then((r) => r.receipts);
+export const listReceipts = (signal?: AbortSignal) => call<ReceiptPage>("/api/receipts", { signal }).then((r) => r.receipts);
 
 export const listCategories = (signal?: AbortSignal) =>
   call<{ categories: CategoryDto[] }>("/api/categories", { signal }).then((r) => r.categories);
@@ -83,6 +83,12 @@ export const patchLedgerEntry = (id: string, patch: LedgerPatch, signal?: AbortS
   call<{ entry: LedgerDetail }>(`/api/ledger/${encodeURIComponent(id)}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch), signal,
   }).then((r) => r.entry);
+
+export const deleteLedgerEntry = (id: string, updatedAt: string, signal?: AbortSignal) =>
+  call<void>(`/api/ledger/${encodeURIComponent(id)}`, {
+    method: "DELETE", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expected_updated_at: updatedAt }), signal,
+  });
 
 export async function getReceiptFile(id: string, signal?: AbortSignal): Promise<Blob> {
   const res = await fetch(`/api/receipts/${encodeURIComponent(id)}/file`, { credentials: "same-origin", cache: "no-store", signal });

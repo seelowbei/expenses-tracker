@@ -41,9 +41,12 @@ export function ReviewInbox({ account, revision, onSaved }: { account: string; r
       <button className={editorButton} disabled={page.isFetching} onClick={refresh}>Refresh reviews</button>
     </div>
     {notice && <p role="status" className="text-sm text-teal-700 dark:text-teal-400">{notice}</p>}
-    {editing && <EntryEditor {...editing} focusTargetId="review-heading" account={account} onClose={() => setEditing(null)} onSaved={() => {
-      setEditing(null); setNotice("Review saved. Ledger totals updated."); onSaved();
-    }} />}
+    {editing && <EntryEditor {...editing} focusTargetId="review-heading" account={account} onClose={() => setEditing(null)}
+      onSaved={() => { setEditing(null); setNotice("Review saved. Ledger totals updated."); onSaved(); }}
+      onRemoved={(confirmed) => {
+        setEditing(null); onSaved();
+        setNotice(confirmed ? "Expense deleted. Ledger totals updated." : "This expense is no longer available.");
+      }} />}
     {page.isPending ? <p role="status">Loading pending receipts…</p> : <>
       {page.isError && <p role="alert" className="text-sm">Couldn't load pending receipts. {page.data ? "Showing the last known list. " : ""}<button className="underline" onClick={() => void page.refetch()}>Retry reviews</button></p>}
       {page.data && (page.data.receipts.length ? <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">

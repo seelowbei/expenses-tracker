@@ -79,7 +79,7 @@ receiptRoutes.get("/", async (c) => {
   const limit = Number(limitText);
   const rows = await readReceiptPage(c.var.db, c.var.user.id, statuses, cursor, limit);
   const page = rows.slice(0, limit), last = page.at(-1);
-  const body: ReceiptPage = { receipts: page.map(toReceiptDto), nextCursor: rows.length > limit && last
+  const body: ReceiptPage = { receipts: page.map((row) => ({ ...toReceiptDto(row), hasLedgerEntry: row.entryId !== null })), nextCursor: rows.length > limit && last
     ? toBase64Url(new TextEncoder().encode(JSON.stringify({ id: last.id, createdAt: last.createdAt, status: statuses.join(",") }))) : null };
   return c.json(body);
 });

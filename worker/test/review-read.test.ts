@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import type { ReceiptPage } from "../src/contracts/review";
 import { receipts, ledgerEntries } from "../src/db/schema";
 import { db, makeApp, seedUser } from "./helpers";
 
@@ -28,8 +29,15 @@ describe("receipt review detail", () => {
   });
   it("returns the associated owned entry and prefers it to the raw draft", async () => {
     const user = await seedUser(); const id = await receiptFor(user.id); const app = makeApp();
-    await db().insert(ledgerEntries).values({ id: "entry", userId: user.id, receiptId: id, merchant: "Saved", categoryId: "sys_other", txnDate: "2026-11-18", currency: "SGD", totalMinor: 123, source: "ai", createdAt: "now", updatedAt: "now" });
-    expect(await (await app.request(`/api/receipts/${id}`, { headers: { Cookie: user.cookie } })).json()).toMatchObject({ entryId: "entry", draft: null });
+    const other = await seedUser({ email: "bob@example.com" });
+    const entryId = crypto.randomUUID();
+    const headers = { Cookie: user.cookie };
+    await db().insert(ledgerEntries).values({ id: entryId, userId: user.id, receiptId: id, merchant: "Saved", categoryId: "sys_other", txnDate: "2026-11-18", currency: "SGD", totalMinor: 123, source: "ai", createdAt: "now", updatedAt: "now" });
+    expect(await (await app.request(`/api/receipts/${id}`, { headers })).json()).toMatchObject({ entryId, draft: null });
+    const recent = async () => (await (await app.request("/api/receipts", { headers })).json<ReceiptPage>()).receipts.find(r => r.id === id);
+    expect(await recent()).toMatchObject({ id, hasLedgerEntry: true });
+    await db().update(ledgerEntries).set({ userId: other.id }).where(eq(ledgerEntries.id, entryId));
+    expect(await recent()).toMatchObject({ id, hasLedgerEntry: false });
   });
 });
 

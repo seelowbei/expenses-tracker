@@ -1,6 +1,6 @@
 # M4 plan — Ledger and review
 
-November 19, 2026. **M4.1–M4.3 are merged. M4.4 is implemented in the working tree with local SQLite and Chrome smoke checks complete. All 281 Workerd tests and worker/web typechecks passed. M4.5 remains planned.**
+November 19, 2026. **M4.1–M4.4 are merged. M4.5 is implemented and locally verified on `codex/m4-5`. Pull request review and two-account staging verification remain open.**
 
 Source: [Technical spec](../documents/Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. Implementation checklist: [todo.md](todo.md).
 
@@ -149,6 +149,19 @@ At the API checkpoint verify isolation, compatibility, conditional creation and 
 Rollback is a code revert: no destructive/down migration, infrastructure change or Drive mutation. Already-created entries remain valid ledger data. Custom categories, deletion UI/API, manual expenses, extraction changes and M5 stay out of scope.
 
 **Contract adoption:** DTOs, cursor behavior, draft omission and save/conflict semantics were recorded in slice 4.3-0 before implementation. Existing M3/M4.2 staging follow-ups remain separate; this plan does not claim them complete.
+
+## M4.5 execution plan — November 19, 2026
+
+M4.5 implements Task 11 and closes the local portion of Task 12. Both editor entry points allow deletion when a ledger entry exists. Deletion is permanent for the ledger and retains the original file, receipt, duplicate hash, extraction evidence and usage.
+
+1. **Record the contract.** Use `DELETE /api/ledger/:id` with the same bounded JSON reader and millisecond `expected_updated_at` validation as PATCH. Return 204 on success, 404 for missing or inaccessible entries and receipts, and 409 for a stale version or ineligible receipt state. Entries without a receipt are eligible.
+2. **Prove atomic deletion.** Guard the delete by session owner, version and receipt eligibility. Resolve pending review only when the delete wins, in the same D1 batch. Verify edits and deletes that race, batch rollback, totals and retained evidence. Exercise the existing review-save, queue and upload guards against the resulting terminal receipt.
+3. **Connect the shared editor.** Explain the effect on the ledger, totals and Drive in a confirmation. Preserve the draft on cancel or failure. Check server state on a stale or uncertain outcome before allowing a fresh confirmation. After success, close the editor, restore focus and refresh ledger and receipt views for the active account.
+4. **Display and verify retained receipts.** Use a user-scoped ledger association so Recent receipts can show “No ledger entry” for a completed receipt with no expense. Verify responsive and keyboard flows, totals and inbox refresh, and recovery when an original is missing. Record local evidence, with two-account staging, migration and CPU checks tracked through Task 12.
+
+Validate and commit each slice on the M4.5 branch. Run the combined local milestone checks after integrating the delete flow.
+
+Local evidence and staging checks are recorded in [M4.5 verification](../documents/M4.5%20verification.md).
 
 ## Recommended PR split
 
