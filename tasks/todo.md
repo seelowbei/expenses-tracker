@@ -1,6 +1,6 @@
 # M4 implementation checklist
 
-Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; M4.1 is implemented and locally verified on November 17, 2026; M4.2 is merged; M4.3 is merged; M4.4 is implemented with local smoke verification and all 281 Workerd tests passing; M4.5 remains unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
+Design and decisions are in [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026. M4.1–M4.4 are merged. M4.5 is implemented and locally verified. Staging sign-off remains open. File lists identify likely locations. Split work further if a task needs more than roughly five substantive files.
 
 ## PR delivery order
 
@@ -14,7 +14,7 @@ Design and decisions: [plan.md](plan.md). The user confirmed explicit review tra
 
 Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verification and documentation run throughout; each PR must pass its own relevant checks before merge. Numbered tasks are identifiers; follow the delivery order above. Checkpoints below apply when their associated work is complete, even where task numbering differs from merge order.
 
-M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20verification.md). M4.2 completes the existing-entry part of Task 1, Tasks 2, 7–8 and Checkpoint C locally. Evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). M4.3 contracts are implemented; [M4.3 verification](../documents/M4.3%20verification.md) records local evidence and browser-tool limits. The M4.4 contract is recorded in the spec. The M4.5 contract remains open. The November 18 M4.2 follow-up adds side-by-side image/PDF review, mobile pane switching and immediate Recent receipts status synchronization; local evidence is in the same verification document.
+Local evidence is recorded in [M4.1 verification](../documents/M4.1%20verification.md), [M4.2 verification](../documents/M4.2%20verification.md), and [M4.3 verification](../documents/M4.3%20verification.md). M4.4 category verification is recorded in Task 10. The technical spec contains both the M4.4 and M4.5 contracts. See [M4.5 verification](../documents/M4.5%20verification.md) for local deletion results and open staging checks.
 
 ## Task 1 — Confirm decisions and define write contracts
 
@@ -324,17 +324,17 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 
 ## Checkpoint D — Both review paths work
 
-- [ ] Full tests, worker/web typechecks and SPA build pass.
-- [ ] Both entry-backed and invalid-output review work, including custom categorization and correct currency totals.
+- [x] Full tests, worker/web typechecks and SPA build pass locally.
+- [x] Both review paths work locally, including custom categorization and currency totals. See Task 10 and M4.5 verification.
 
 ## Task 11 — Delete an entry while retaining its receipt
 
 **Description:** Implement deletion with the agreed terminal-receipt behavior and a clear UI confirmation.
 
 **Acceptance criteria:**
-- [ ] Confirmed deletion removes the ledger row and totals only; original Drive file, receipt metadata and usage remain, with pending review resolved atomically.
-- [ ] Another user's ID, stale entry and failed batch are handled safely; a delayed queue delivery or old review form cannot recreate the row.
-- [ ] UI explains Drive retention, handles cancel/retry/conflict, and refreshes ledger/review state without reload.
+- [x] Confirmed deletion removes the ledger row and its contribution to totals. The original Drive file, receipt metadata and usage are retained, and pending review is resolved atomically.
+- [x] Ownership, stale versions and failed batches are handled safely. A delayed queue delivery or old review form cannot recreate the row.
+- [x] The UI explains Drive retention, handles cancel, retry and conflict, and refreshes the ledger and review inbox without a page reload.
 
 **Verification:** Deletion/queue-redelivery regression tests, `drive-no-delete.test.ts`, worker/web typechecks, SPA build and Chrome confirmation/failure flow. Assert no Google or AI calls occur.
 
@@ -343,11 +343,11 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **M4.5 increments**
 
 - [x] Record the body, version precondition, status codes and terminal receipt behavior in the technical spec.
-- [ ] Implement and verify atomic deletion, including races, rollback and attempts to recreate the entry.
-- [ ] Add editor confirmation and recovery, then verify account-scoped refresh of totals and pending review.
-- [ ] Show “No ledger entry” on retained completed receipts and run the local milestone checks in Task 12.
+- [x] Implement and verify atomic deletion, including races, rollback and attempts to recreate the entry.
+- [x] Add editor confirmation and recovery, then verify account-scoped refresh of totals and pending review.
+- [x] Show “No ledger entry” on retained completed receipts and record the local milestone checks.
 
-**Likely files:** `worker/src/api/ledger.ts`, `worker/src/db/ledger.ts`, `worker/test/ledger-delete.test.ts`, `web/src/api.ts`, `web/src/ledger/EntryEditor.tsx`.
+**Implementation:** `worker/src/api/ledger.ts`, `worker/src/db/ledger-delete.ts`, `worker/test/ledger-delete.test.ts`, `web/src/api.ts`, and `web/src/ledger/EntryEditor.tsx`. See [M4.5 verification](../documents/M4.5%20verification.md).
 
 ## Task 12 — Verify and document the milestone
 

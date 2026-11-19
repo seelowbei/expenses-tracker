@@ -1,6 +1,6 @@
 # M4 plan — Ledger and review
 
-November 19, 2026. **M4.1–M4.4 are merged. M4.5 starts from the M4.4 merge on `codex/m4-5`. Two-account staging verification remains open.**
+November 19, 2026. **M4.1–M4.4 are merged. M4.5 is implemented and locally verified on `codex/m4-5`. Pull request review and two-account staging verification remain open.**
 
 Source: [Technical spec](../documents/Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. Implementation checklist: [todo.md](todo.md).
 
@@ -160,6 +160,8 @@ M4.5 implements Task 11 and closes the local portion of Task 12. Both editor ent
 4. **Display and verify retained receipts.** Use a user-scoped ledger association so Recent receipts can show “No ledger entry” for a completed receipt with no expense. Verify responsive and keyboard flows, totals and inbox refresh, and recovery when an original is missing. Record local evidence, with two-account staging, migration and CPU checks tracked through Task 12.
 
 Validate and commit each slice on the M4.5 branch. Run the combined local milestone checks after integrating the delete flow.
+
+Local evidence and staging checks are recorded in [M4.5 verification](../documents/M4.5%20verification.md).
 
 ## Recommended PR split
 
