@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { CategoryDto } from "../../../worker/src/contracts/categories";
 import { CurrencySelect } from "./CurrencySelect";
 import { SelectControl } from "./SelectControl";
@@ -6,8 +7,8 @@ import type { EntryForm, FormErrors } from "./form";
 export const editorControl = "min-h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900";
 export const editorButton = "min-h-11 rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50 dark:border-slate-600";
 
-export function EntryFields({ form, setForm, errors, categories }: {
-  form: EntryForm; setForm: (form: EntryForm) => void; errors: FormErrors; categories: CategoryDto[];
+export function EntryFields({ form, setForm, errors, categories, categoryAction }: {
+  form: EntryForm; setForm: (form: EntryForm) => void; errors: FormErrors; categories: CategoryDto[]; categoryAction: ReactNode;
 }) {
   const a11y = (field: string) => ({ id: `edit-${field}`, "aria-invalid": !!errors[field], "aria-describedby": errors[field] ? `error-${field}` : undefined });
   const error = (field: string) => errors[field] && <span id={`error-${field}`} className="block text-sm text-red-700 dark:text-red-300">{errors[field]}</span>;
@@ -21,12 +22,15 @@ export function EntryFields({ form, setForm, errors, categories }: {
     {input("merchant", "Merchant", "text", 120)}
     <div className="grid min-w-0 gap-4 sm:grid-cols-2">{input("txn_date", "Date", "date")}{input("txn_time", "Time (optional)", "time")}</div>
     <div className="grid gap-4 sm:grid-cols-2">
-      <label className="block min-w-0 space-y-1 text-sm">Category
-        <SelectControl {...a11y("category_id")} className={editorControl} value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
-          <option value="" disabled>Choose a category</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </SelectControl>{error("category_id")}
-      </label>
+      <div className="min-w-0 space-y-2">
+        <label className="block space-y-1 text-sm">Category
+          <SelectControl {...a11y("category_id")} className={editorControl} value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
+            <option value="" disabled>Choose a category</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </SelectControl>{error("category_id")}
+        </label>
+        {categoryAction}
+      </div>
       <CurrencySelect value={form.currency} onChange={(currency) => setForm({ ...form, currency })} className={editorControl} error={errors.currency} />
     </div>
     <div className="grid gap-4 sm:grid-cols-2">{input("total", `Total (${form.currency})`)}{input("tax", `Tax (${form.currency}, optional)`)}</div>

@@ -1,6 +1,6 @@
 # M4 implementation checklist
 
-Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; M4.1 is implemented and locally verified on November 17, 2026; M4.2 is merged; M4.3 is implemented and locally verified on November 18, 2026; M4.4–M4.5 remain unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
+Design and decisions: [plan.md](plan.md). The user confirmed explicit review tracking on November 16, 2026; M4.1 is implemented and locally verified on November 17, 2026; M4.2 is merged; M4.3 is merged; M4.4 is implemented with local smoke verification and all 281 Workerd tests passing; M4.5 remains unstarted. File lists are likely locations, not permission to broaden scope. Split work further if a task needs more than roughly five substantive files.
 
 ## PR delivery order
 
@@ -14,14 +14,14 @@ Design and decisions: [plan.md](plan.md). The user confirmed explicit review tra
 
 Task 1 decisions/contracts are resolved incrementally per PR. Task 12 verification and documentation run throughout; each PR must pass its own relevant checks before merge. Numbered tasks are identifiers; follow the delivery order above. Checkpoints below apply when their associated work is complete, even where task numbering differs from merge order.
 
-M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20verification.md). M4.2 completes the existing-entry part of Task 1, Tasks 2, 7–8 and Checkpoint C locally. Evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). M4.3 contracts are implemented; [M4.3 verification](../documents/M4.3%20verification.md) records local evidence and browser-tool limits. M4.4–M4.5 contracts remain to be resolved with their implementations. The November 18 M4.2 follow-up adds side-by-side image/PDF review, mobile pane switching and immediate Recent receipts status synchronization; local evidence is in the same verification document.
+M4.1 is merged; local evidence is in [M4.1 verification](../documents/M4.1%20verification.md). M4.2 completes the existing-entry part of Task 1, Tasks 2, 7–8 and Checkpoint C locally. Evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). M4.3 contracts are implemented; [M4.3 verification](../documents/M4.3%20verification.md) records local evidence and browser-tool limits. The M4.4 contract is recorded in the spec. The M4.5 contract remains open. The November 18 M4.2 follow-up adds side-by-side image/PDF review, mobile pane switching and immediate Recent receipts status synchronization; local evidence is in the same verification document.
 
 ## Task 1 — Confirm decisions and define write contracts
 
 **Description:** Reconcile the plan's API additions, review completion, deletion lifecycle, filtering and category rules with the technical spec, then define the human-edit contract using appropriate existing extraction field schemas.
 
 **Acceptance criteria:**
-- [x] Carry the confirmed `reviewed_at` decision and M4.2 existing-entry write proposals into the spec before dependent implementation. M4.3 contracts were adopted before implementation on November 18. M4.4–M4.5 proposals remain scoped to their PRs.
+- [x] Carry the confirmed `reviewed_at` decision and M4.2 existing-entry write proposals into the spec before dependent implementation. M4.3 contracts were adopted before implementation on November 18. The M4.4 contract was adopted before implementation on November 19. M4.5 proposals remain scoped to that PR.
 - [x] Validate allowed fields, actual dates/time, safe integer amounts, nullable fields and explicit confirmation; reject unknown fields and define stable errors/body limits.
 - [x] Export browser-consumable existing-entry contract types without Worker runtime dependencies; document response shapes and optimistic concurrency (read cursors documented in M4.1).
 
@@ -309,11 +309,14 @@ Each slice ends with focused tests, affected typechecks/build, diff review and a
 **Description:** Let the user create a category and immediately select it in the editor.
 
 **Acceptance criteria:**
-- [ ] Server generates the category ID/slug from a bounded name, including a non-ASCII fallback; no client-supplied user association.
-- [ ] Duplicate or system-colliding names/slugs return a clear conflict; concurrent creates cannot produce duplicates.
-- [ ] New category is immediately selectable and reaches subsequent extraction via existing category lookup; other users cannot select it.
+- [x] Server generates the category ID/slug from a bounded name, including a non-ASCII fallback; no client-supplied user association.
+- [x] Duplicate or system-colliding names/slugs return a clear conflict; concurrent creates cannot produce duplicates.
+- [x] New category is immediately selectable and reaches subsequent extraction via existing category lookup; other users cannot select it.
 
-**Verification:** Category route/helper tests and worker/web typechecks; SPA build and Chrome creation/duplicate flow. Verify extraction category inputs with a fake AI client.
+**Verification (November 19):** Worker, web and infrastructure typechecks, SPA build and Worker dry-run bundle passed. All 137 runtime-independent tests passed in Node. An in-memory SQLite smoke check exercised the production route and migrations, including two users, competing requests, system collisions, a Unicode slug and the pipeline with fake AI. Chrome used the built SPA with synthetic API responses to verify duplicate handling, draft retention, immediate selection and saving the category through both review paths. No schema migration is needed.
+
+- [x] Run the Workerd category/pipeline tests and full suite. All 281 tests across 31 files passed on November 19 after running outside the sandbox; worker and web typechecks also passed.
+- [ ] Verify with both accounts on staging after merge.
 
 **Dependencies:** Tasks 3 and 8; scheduled after M4.3 to prioritize completing review. **Scope:** Medium.
 
