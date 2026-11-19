@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import type { ReceiptListItem } from "../../worker/src/contracts/review";
 import { ApiError, getMe, listReceipts, logout, retryReceipt, uploadReceipt, type Me, type Receipt } from "./api";
 import { prepareFile, PrepareError } from "./prepare";
 import { ReviewInbox } from "./ledger/ReviewInbox";
@@ -236,7 +237,7 @@ const FAILURE_DETAIL: Record<string, string> = {
 /** Permanent failures only; drive_disconnected can be retried after signing in again. */
 const NO_RETRY = new Set(["unsupported_scanned_pdf", "drive_file_missing"]);
 
-function statusText(r: Receipt): { label: string; detail?: string } {
+function statusText(r: ReceiptListItem): { label: string; detail?: string } {
   const after = r.retryAfter && new Date(r.retryAfter).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
   if (r.status === "queued" && after) {
     return r.error === "ai_quota"
@@ -246,10 +247,11 @@ function statusText(r: Receipt): { label: string; detail?: string } {
   if (r.status === "queued" && r.error) return { label: "Retrying soon" };
   if (r.status === "needs_review" && r.error === "invalid_output") return { label: "Needs review", detail: "Some fields couldn't be read" };
   if (r.status === "failed") return { label: "Failed", detail: (r.error && FAILURE_DETAIL[r.error]) ?? "Couldn't be read" };
+  if (r.status === "done" && r.hasLedgerEntry === false) return { label: "No ledger entry" };
   return { label: STATUS_LABEL[r.status] };
 }
 
-function ReceiptRow({ r }: { r: Receipt }) {
+function ReceiptRow({ r }: { r: ReceiptListItem }) {
   const qc = useQueryClient();
   const retry = useMutation({
     mutationFn: () => retryReceipt(r.id),

@@ -20,8 +20,6 @@ export const LedgerFields = z.object({
 export const LedgerDelete = z.strictObject({
   expected_updated_at: z.iso.datetime({ precision: 3 }),
 });
-export type LedgerDelete = z.infer<typeof LedgerDelete>;
-
 export const LedgerPatch = LedgerFields.partial().extend({
   ...LedgerDelete.shape,
   confirm_review: z.literal(true).optional(),

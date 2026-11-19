@@ -48,7 +48,7 @@ export async function getMe(): Promise<Me | null> {
   }
 }
 
-export const listReceipts = (signal?: AbortSignal) => call<{ receipts: Receipt[] }>("/api/receipts", { signal }).then((r) => r.receipts);
+export const listReceipts = (signal?: AbortSignal) => call<ReceiptPage>("/api/receipts", { signal }).then((r) => r.receipts);
 
 export const listCategories = (signal?: AbortSignal) =>
   call<{ categories: CategoryDto[] }>("/api/categories", { signal }).then((r) => r.categories);

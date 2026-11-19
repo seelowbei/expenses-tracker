@@ -8,7 +8,7 @@ import { clearSession } from "../query-client";
 import { CategoryCreate } from "./CategoryCreate";
 import { EntryFields, editorButton } from "./EntryFields";
 import { entryForm, formPatch, formCreate, type FormErrors } from "./form";
-import { syncReviewedEntry } from "./review-cache";
+import { syncRemovedEntry, syncReviewedEntry } from "./review-cache";
 import { ReceiptPreview } from "./ReceiptPreview";
 import { formatMoney } from "./format";
 
@@ -98,13 +98,9 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
       if (active.current) setCreatingCategory(false);
     }
   };
-  const finishRemoval = async (id: string, confirmed: boolean) => {
-    const keys = ["ledger", "ledger-detail", "receipts", "receipt-detail", "review"];
-    await Promise.all(keys.map((key) => qc.cancelQueries({ queryKey: [key, account] })));
-    if (!active.current || qc.getQueryData<{ email: string } | null>(["me"])?.email !== account) return;
+  const finishRemoval = async (entry: LedgerDetail, confirmed: boolean) => {
+    if (!await syncRemovedEntry(qc, account, entry, confirmed) || !active.current) return;
     removed.current = true;
-    qc.removeQueries({ queryKey: ["ledger-detail", account, id], exact: true });
-    for (const key of keys) void qc.invalidateQueries({ queryKey: [key, account] });
     onRemoved(confirmed);
   };
   const reload = async (afterDelete = checkingDelete) => {
@@ -130,7 +126,7 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
     } catch (e) {
       if (!active.current) return;
       if (e instanceof ApiError && e.status === 401) clearSession(qc);
-      else if (afterDelete && base && e instanceof ApiError && e.status === 404) await finishRemoval(base.id, false);
+      else if (afterDelete && base && e instanceof ApiError && e.status === 404) await finishRemoval(base, false);
       else setMessage("Couldn't reload the saved state. Your draft is retained. Try loading it again.");
     } finally { if (active.current) setBusy(false); }
   };
@@ -142,7 +138,7 @@ export function EntryEditor({ entry, review, account, onClose, onSaved, onRemove
     request.current = controller;
     try {
       await deleteLedgerEntry(base.id, base.updated_at, controller.signal);
-      if (active.current) await finishRemoval(base.id, true);
+      if (active.current) await finishRemoval(base, true);
     } catch (e) {
       if (!active.current) return;
       if (e instanceof ApiError && e.status === 401) { clearSession(qc); return; }

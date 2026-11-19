@@ -47,6 +47,8 @@ it("deletes only the ledger entry, resolves review and prevents recreation", asy
   expect(await ledger.json()).toMatchObject({ entries: [{ id: f.otherEntryId }], totals: [{ currency: "JPY", total_minor: 500 }] });
   const detail = await f.request(`/api/receipts/${f.id}`, { headers: f.headers });
   expect(await detail.json()).toMatchObject({ entryId: null, draft: null });
+  const recent = await f.request("/api/receipts", { headers: f.headers });
+  expect(await recent.json()).toMatchObject({ receipts: [{ id: f.id, status: "done", hasLedgerEntry: false, driveLink: f.evidence.driveLink }] });
   const review = await f.request(`/api/receipts/${f.id}/review`, f.write("POST", {
     merchant: "Shop", txn_date: "2026-11-19", txn_time: null, currency: "SGD", total_minor: 100,
     tax_minor: null, category_id: "sys_other", payment_method: null, line_items: null, notes: null,
