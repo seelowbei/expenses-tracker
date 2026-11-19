@@ -42,7 +42,6 @@ pulumi config set --secret googleClientId <id> -s staging
 pulumi config set --secret googleClientSecret <secret> -s staging
 openssl rand -base64 32 | pulumi config set --secret tokenEncKey -s staging
 openssl rand -base64 32 | pulumi config set --secret sessionSecret -s staging
-pulumi config set --secret allowedEmails you@example.com,partner@example.com -s staging
 ```
 
 For production, use the production OAuth client. To serve it on a custom domain instead of workers.dev:
