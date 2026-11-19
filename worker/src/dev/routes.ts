@@ -1,5 +1,7 @@
-// M1 extraction spike routes. Local only: mounted behind DEV_ROUTES === "true",
-// which is set in wrangler.jsonc top-level vars and never by the deployed (Pulumi) config.
+// M1 extraction spike routes. Local only: they have no session check, so they answer only when
+// DEV_ROUTES === "true" (wrangler.jsonc top-level vars, never the deployed Pulumi config) AND
+// APP_ORIGIN is a loopback origin. The second check keeps them off if DEV_ROUTES ever leaks
+// into a deployed config, since a deployed APP_ORIGIN is always an https public host.
 import { Hono } from "hono";
 import { DEFAULT_CATEGORIES } from "../agent/categories";
 import { aiClient, extractReceipt, VISION_MODEL, type ImageMode, type ReceiptInput } from "../agent/extract";
@@ -9,8 +11,20 @@ import { MAX_UPLOAD_BYTES, sniffMime } from "../lib/sniff";
 
 export const devRoutes = new Hono<{ Bindings: Bindings }>();
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** True only for local dev. APP_ORIGIN is config, unlike the request's Host header, which a client controls. */
+export function devRoutesEnabled(env: Pick<Bindings, "DEV_ROUTES" | "APP_ORIGIN">): boolean {
+  if (env.DEV_ROUTES !== "true") return false;
+  try {
+    return LOOPBACK_HOSTS.has(new URL(env.APP_ORIGIN).hostname);
+  } catch {
+    return false;
+  }
+}
+
 devRoutes.use("*", async (c, next) => {
-  if (c.env.DEV_ROUTES !== "true") return c.notFound();
+  if (!devRoutesEnabled(c.env)) return c.notFound();
   await next();
 });
 
