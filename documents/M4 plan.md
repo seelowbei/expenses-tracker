@@ -2,13 +2,13 @@
 
 November 19, 2026. **M4.1–M4.5 are merged. Two-account staging verification remains open; see "Open follow-ups" below.**
 
-Source: [Technical spec](../documents/Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. The task checklist (`todo.md`) was retired once M4 merged; its [last version](https://github.com/seelowbei/expenses-tracker/blob/4dcf258/tasks/todo.md) stays in git history, and its open items are listed below.
+Source: [Technical spec](./Expense%20Tracker%20%E2%80%94%20Technical%20Spec.md), especially “Data model”, “Key flows → Review and ledger”, “Evaluation before launch”, “API”, and milestone M4. The task checklist (`todo.md`) was retired once M4 merged; its [last version](https://github.com/seelowbei/expenses-tracker/blob/4dcf258/tasks/todo.md) stays in git history, and its open items are listed below.
 
 ## Open follow-ups
 
 Carried over from the retired checklist. All need CI deployment to staging; record M3 staging results only when the user supplies them.
 
-- [ ] Verify dirty-close Cancel/Discard and live account switching/session expiry with an unsaved form (native-dialog automation stalled locally; see [M4.3 verification](../documents/M4.3%20verification.md)).
+- [ ] Verify dirty-close Cancel/Discard and live account switching/session expiry with an unsaved form (native-dialog automation stalled locally; see [M4.3 verification](./M4.3%20verification.md)).
 - [ ] Verify real M3 receipts, both users, upload/poll/retry regressions and route CPU against the 10 ms budget. Keep M3 and M4.2 staging sign-off separate.
 - [ ] Verify custom category creation (M4.4) with both accounts.
 - [ ] Verify two-user isolation, upload-to-review-to-ledger, both review cases, exact money, time ordering, pagination, categories, deletion and a missing Drive original.
@@ -113,7 +113,7 @@ Keep the existing three-second receipt polling and 15-minute cap. When an observ
 
 ## M4.3 execution plan — November 18, 2026
 
-Branch: `codex/m4-3`, created from `origin/main`. Implementation and local verification are complete; PR review and staging remain. This implements Tasks 6 and 9, preserving M4.4/M4.5 scope and prior staging follow-ups. Contracts were adopted in the technical spec before dependent code. Evidence and verification limits: [M4.3 verification](../documents/M4.3%20verification.md).
+Branch: `codex/m4-3`, created from `origin/main`. Implementation and local verification are complete; PR review and staging remain. This implements Tasks 6 and 9, preserving M4.4/M4.5 scope and prior staging follow-ups. Contracts were adopted in the technical spec before dependent code. Evidence and verification limits: [M4.3 verification](./M4.3%20verification.md).
 
 **Outcome:** every pending receipt is reachable, including missing-date/invalid-output receipts. A user can review an existing entry or create a missing entry exactly once, then see the inbox and currency-separated totals update without reloading.
 
@@ -173,7 +173,7 @@ M4.5 implements Task 11 and closes the local portion of Task 12. Both editor ent
 
 Validate and commit each slice on the M4.5 branch. Run the combined local milestone checks after integrating the delete flow.
 
-Local evidence and staging checks are recorded in [M4.5 verification](../documents/M4.5%20verification.md).
+Local evidence and staging checks are recorded in [M4.5 verification](./M4.5%20verification.md).
 
 ## Recommended PR split
 
@@ -234,4 +234,4 @@ After CI deploys M4, check representative ledger read and edit CPU against the p
 | Large lists exceed CPU/response bounds | Pagination, SQL aggregates, bounded ranges and detail-on-demand; verify in staging. |
 | Spec lacks new route, deletion lifecycle and review-tracking details | Review these proposals and update the spec before dependent code. |
 
-M4.2 local evidence and staging follow-ups: [M4.2 verification](../documents/M4.2%20verification.md). Deployment remains CI-only; no infrastructure mutation or deployment was performed during implementation.
+M4.2 local evidence and staging follow-ups: [M4.2 verification](./M4.2%20verification.md). Deployment remains CI-only; no infrastructure mutation or deployment was performed during implementation.
