@@ -17,8 +17,13 @@ export const LedgerFields = z.object({
   line_items: z.array(z.object({ description: z.string().trim().min(1).max(200), amount_minor: z.number().int().safe() }).strict()).max(50).nullable(),
   notes: z.string().trim().max(2000).transform((s) => s || null).nullable(),
 }).strict();
-export const LedgerPatch = LedgerFields.partial().extend({
+export const LedgerDelete = z.strictObject({
   expected_updated_at: z.iso.datetime({ precision: 3 }),
+});
+export type LedgerDelete = z.infer<typeof LedgerDelete>;
+
+export const LedgerPatch = LedgerFields.partial().extend({
+  ...LedgerDelete.shape,
   confirm_review: z.literal(true).optional(),
   confirm_currency: z.literal(true).optional(),
 }).strict().refine((v) => v.confirm_review || Object.keys(LedgerFields.shape).some((key) => key in v));

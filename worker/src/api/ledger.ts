@@ -6,7 +6,8 @@ import type { AppEnv } from "../app-env";
 import { type LedgerPage } from "../contracts/ledger";
 import { readLedger } from "../db/ledger";
 import { categories } from "../db/schema";
-import { LedgerPatch } from "../contracts/ledger-write";
+import { LedgerDelete, LedgerPatch } from "../contracts/ledger-write";
+import { deleteLedgerEntry } from "../db/ledger-delete";
 import { saveLedgerEntry } from "../db/ledger-write";
 import { ledgerCursor, parseLedgerQuery } from "./ledger-query";
 
@@ -47,4 +48,15 @@ ledgerRoutes.patch("/:id", async (c) => {
   if (result === "currency_confirmation_required" || result === "invalid_body") return c.json({ error: result }, 400);
   if (result === "invalid_stored_entry") return c.json({ error: result }, 422);
   return ledgerDetailResponse(c, c.req.param("id"));
+});
+
+ledgerRoutes.delete("/:id", async (c) => {
+  const read = await readJsonBody(c.req.raw);
+  if (!read.ok) return c.json({ error: read.error }, read.status);
+  const parsed = LedgerDelete.safeParse(read.body);
+  if (!parsed.success) return c.json({ error: "invalid_body", fields: [...new Set(parsed.error.issues.map((i) => i.path.join(".")))] }, 400);
+  const result = await deleteLedgerEntry(c.var.db, c.var.user.id, c.req.param("id"), parsed.data.expected_updated_at);
+  if (result === "not_found") return c.json({ error: result }, 404);
+  if (result === "entry_changed" || result === "receipt_busy") return c.json({ error: result }, 409);
+  return c.body(null, 204);
 });
