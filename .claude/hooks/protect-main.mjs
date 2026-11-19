@@ -8,7 +8,8 @@
 // `refs/heads/main`, `+x:main`, `:main`), uses `--all` / `--mirror`, or has no
 // refspec (or `HEAD`) while the current branch, or its push target, is main.
 // A bare `git push` from main is the case pattern-based deny rules can't see.
-// Best effort: it follows `cd <dir>` and `git -C <dir>`, not every shell trick.
+// Best effort: it follows `cd <dir>` and `git -C <dir>` and skips heredoc bodies
+// and `#` comments, but not every shell trick (git aliases, eval, scripts).
 
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -18,13 +19,19 @@ export const PROTECTED = new Set(["main"]);
 
 const commandText = (c) => (Array.isArray(c) ? c.join(" ") : typeof c === "string" ? c : "");
 
-/** Splits shell text into simple commands, each a list of unquoted words. */
+/**
+ * Splits shell text into simple commands, each a list of unquoted words.
+ * Heredoc bodies and `#` comments are data, not commands, so they are skipped:
+ * a commit message or PR body that mentions pushing to main must not be blocked.
+ */
 export function simpleCommands(text) {
   const commands = [];
   let words = [];
   let word = "";
   let inWord = false;
   let quote = null;
+  /** Heredocs opened on the current line; their bodies start after its newline. */
+  let heredocs = [];
   const endWord = () => {
     if (inWord) words.push(word);
     word = "";
@@ -49,6 +56,38 @@ export function simpleCommands(text) {
     } else if (ch === "\\" && i + 1 < text.length) {
       word += text[++i];
       inWord = true;
+    } else if (ch === "#" && !inWord) {
+      // Comment: skip to the end of the line (the newline itself still ends the command).
+      while (i + 1 < text.length && text[i + 1] !== "\n") i++;
+    } else if (ch === "<" && text[i + 1] === "<" && text[i + 2] !== "<") {
+      // Heredoc operator `<<DELIM`, `<<-DELIM`, `<<'DELIM'`, `<<"DELIM"`.
+      endWord();
+      i += 2;
+      const stripTabs = text[i] === "-";
+      if (stripTabs) i++;
+      while (text[i] === " " || text[i] === "\t") i++;
+      let delim = "";
+      while (i < text.length && !/[\s;&|()<>]/.test(text[i])) {
+        if (text[i] !== "'" && text[i] !== '"' && text[i] !== "\\") delim += text[i];
+        i++;
+      }
+      i--; // the loop's i++ lands on the character after the delimiter
+      if (delim) heredocs.push({ delim, stripTabs });
+    } else if (ch === "\n" && heredocs.length) {
+      endCommand();
+      // Skip each body in order, up to and including its delimiter line.
+      for (const { delim, stripTabs } of heredocs) {
+        for (;;) {
+          const start = i + 1;
+          if (start >= text.length) break;
+          const nl = text.indexOf("\n", start);
+          const end = nl < 0 ? text.length : nl;
+          const line = text.slice(start, end);
+          i = end;
+          if ((stripTabs ? line.replace(/^\t+/, "") : line) === delim) break;
+        }
+      }
+      heredocs = [];
     } else if (ch === ";" || ch === "&" || ch === "|" || ch === "\n" || ch === "(" || ch === ")") {
       endCommand();
     } else if (/\s/.test(ch)) {
