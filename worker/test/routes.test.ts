@@ -2,14 +2,30 @@ import { describe, expect, it } from "vitest";
 import { app } from "../src/index";
 import { sniffMime } from "../src/lib/sniff";
 
+const DEV_ENV = { DEV_ROUTES: "true", APP_ORIGIN: "http://localhost:8787" };
+
 describe("dev routes", () => {
   it("are hidden unless DEV_ROUTES is true", async () => {
     const res = await app.request("/api/dev/extract", { method: "POST" }, {});
     expect(res.status).toBe(404);
   });
 
+  it.each([
+    ["a deployed origin", "https://expense-tracker.example.workers.dev"],
+    ["a host merely starting with localhost", "https://localhost.example.com"],
+    ["a missing origin", undefined],
+  ])("stay hidden with DEV_ROUTES=true but %s", async (_name, origin) => {
+    const res = await app.request("/api/dev/extract", { method: "POST" }, { DEV_ROUTES: "true", APP_ORIGIN: origin });
+    expect(res.status).toBe(404);
+  });
+
+  it.each(["http://localhost:8787", "http://127.0.0.1:8787", "http://[::1]:8787"])("are enabled for loopback origin %s", async (origin) => {
+    const res = await app.request("/api/dev/extract", { method: "POST" }, { DEV_ROUTES: "true", APP_ORIGIN: origin });
+    expect(res.status).toBe(400); // reached the handler: not multipart
+  });
+
   it("return 400 when the body is not multipart", async () => {
-    const res = await app.request("/api/dev/extract", { method: "POST" }, { DEV_ROUTES: "true" });
+    const res = await app.request("/api/dev/extract", { method: "POST" }, DEV_ENV);
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "missing_file" });
   });
@@ -17,13 +33,13 @@ describe("dev routes", () => {
   it("reject unsupported file types", async () => {
     const form = new FormData();
     form.append("file", new File([new Uint8Array([0x47, 0x49, 0x46, 0x38])], "x.gif"));
-    const res = await app.request("/api/dev/extract", { method: "POST", body: form }, { DEV_ROUTES: "true" });
+    const res = await app.request("/api/dev/extract", { method: "POST", body: form }, DEV_ENV);
     expect(res.status).toBe(415);
   });
 });
 
 describe("POST /api/dev/agree", () => {
-  const envWith = (run: () => Promise<unknown>) => ({ DEV_ROUTES: "true", AI: { run } });
+  const envWith = (run: () => Promise<unknown>) => ({ ...DEV_ENV, AI: { run } });
 
   it("treats Workers AI error 5016 as the license being accepted", async () => {
     const env = envWith(async () => {

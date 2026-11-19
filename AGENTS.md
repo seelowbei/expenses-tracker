@@ -105,6 +105,7 @@ Run typecheck and the relevant tests before calling a change done.
 
 ## Do not
 
+- Push to `main` (bare `git push` from `main` included) or merge into it. Every push to `main` deploys to staging and GitHub branch protection isn't available on this plan, so `.claude/hooks/protect-main.mjs` blocks it for Claude Code and Codex. Push a feature branch and open a PR; check `git status -sb` before committing, since the user may have merged and switched to `main` between turns.
 - Run `wrangler deploy`, `wrangler secret put`, `wrangler rollback`, or any `--remote` D1 command. Deployment is CI-only (merge to `main` → staging, published GitHub release `v*` → production).
 - Run `pulumi up`, `pulumi destroy`, `pulumi refresh`, `pulumi state`, `pulumi stack rm/init` or `pulumi config set`. `pulumi preview` is fine. Ask the user to apply.
 - Read, print or commit `worker/.dev.vars`, any `.env` file (e.g. `worker/.env` holding the dev token) or any secret. Never echo `$CLOUDFLARE_API_TOKEN`.

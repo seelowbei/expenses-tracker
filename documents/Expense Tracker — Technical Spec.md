@@ -389,6 +389,9 @@ The two highest-value secrets are the users' Google refresh tokens. They are enc
 - **Logging:** log receipt ids, statuses and error codes only. Never log OCR text, amounts or tokens.
 - **AI usage rows:** `ai_usage` stores counts, model names, outcomes and error codes only, never prompts, replies or receipt content. It is scoped by `user_id` like everything else, and removed with the account.
 - **Account deletion:** `DELETE /api/me` (v1.1) removes D1 rows and revokes the Google token; Drive files stay with the user.
+- **Dev routes:** `/api/dev/*` (the M1 eval) has no session check, so it answers only when `DEV_ROUTES=true` (local wrangler vars, never Pulumi) and `APP_ORIGIN` is a loopback origin.
+- **ID token signature:** not verified. The ID token comes straight from Google's token endpoint over TLS in the code exchange, which OIDC Core 3.1.3.7 allows; `iss`, `aud`, `exp` and `iat` are still checked. Accepted.
+- **Rate limiting:** none on `/auth/*` or the API. Every `/api/*` route needs a session from an allow-listed account, and `/auth/google` only sets a short-lived state cookie. A rate-limit binding is outside the products this design allows (Workers, D1, Queues, Workers AI, static assets); Cloudflare's DDoS protection still applies. Accepted; revisit if the app opens beyond the two users.
 - **Google verification:** publish the consent screen as In production. With only non-sensitive scopes no verification is required, and it avoids Testing mode's 7-day refresh-token expiry. Because the app is then open to any Google account, the callback rejects any email not in the ALLOWED\_EMAILS var (the two users).
 
 ## Limits, cost & failure handling
