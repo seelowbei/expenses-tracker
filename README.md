@@ -104,7 +104,7 @@ infrastructure/
    - `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` (dev)
    - `https://<production-origin>/auth/google/callback` (prod)
 
-**GitHub repo secrets:** `CLOUDFLARE_API_TOKEN` (the provisioning token below), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`.
+**GitHub environment secrets** (on both the `staging` and `production` environments): `CLOUDFLARE_API_TOKEN` (the provisioning token below), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`. `staging` deploys only from `main`; `production` only from `v*` tags and needs a reviewer's approval. Branch protection on `main` requires the `typecheck-and-test` CI check.
 
 ### Cloudflare tokens
 

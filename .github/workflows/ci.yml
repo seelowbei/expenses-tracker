@@ -14,7 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  # The job id is the required status check on main (branch protection). Renaming it means
+  # updating the required check in the same change, or every PR waits forever.
+  typecheck-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

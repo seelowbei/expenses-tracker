@@ -523,7 +523,7 @@ Wrangler is no longer the deployment source. It runs local dev, bundles the Work
 4. Google Cloud: create a project, enable the Drive API, and configure the OAuth consent screen (External; add both accounts as test users and leave it in Testing mode, since the test-user list is the access control). Use scopes `openid`, `email`, `profile`, `drive.file`.
 5. Create two OAuth Web clients (dev, prod) with redirect URIs `http://localhost:8787/auth/google/callback`, `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` and the production origin's `/auth/google/callback`.
 6. Services: set `appOrigin` and the secrets for each stack.
-7. GitHub repo secrets: `CLOUDFLARE_API_TOKEN` (Account: Workers Scripts, D1, Queues edit; Zone: Workers Routes edit if a custom domain is used), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`.
+7. GitHub environment secrets (`staging` and `production` environments): `CLOUDFLARE_API_TOKEN` (Account: Workers Scripts, D1, Queues edit; Zone: Workers Routes edit if a custom domain is used), `CLOUDFLARE_ACCOUNT_ID`, `PULUMI_ACCESS_TOKEN`.
 
 **CI/CD (`.github/workflows/deploy.yml`)**
 
