@@ -29,7 +29,7 @@ export const EXTRACTION_SHAPE = `{
   "total_text": string | null,        // the line you read total from, copied exactly as printed
   "tax": number | null,
   "payment_method": "cash" | "card" | "ewallet" | "bank_transfer" | "other" | null,
-  "line_items": [{ "description": string, "amount": number }],   // max 50, [] if none
+  "line_items": [{ "description": string, "amount": number }],   // max 50, [] if none; discounts negative
   "category_slug": string,
   "confidence": number                // 0..1
 }`;

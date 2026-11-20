@@ -10,13 +10,13 @@ export interface PromptContext {
 const SYSTEM_TEMPLATE = `You extract data from a single purchase receipt. Output ONLY one JSON object matching the schema. No prose, no markdown, no code fences. The first character of your reply must be "{" and the last must be "}".
 Rules:
 - Use values printed on the receipt. Never guess. Unknown -> null.
-- total = final amount paid incl. tax and tips, after discounts and vouchers.
+- total = final amount paid incl. tax and tips, after every discount, voucher and promo. Never a subtotal or an amount printed above a discount line.
 - total_text = the line you read total from, copied exactly as printed: its label and amount. Not printed -> null.
 - tax = the tax amount printed (also when prices are tax-inclusive, e.g. "Inclusive of 9% GST ($0.37)" -> 0.37). Fees, surcharges, service charges and discounts are not tax. No tax amount printed -> null, not 0. Ignore struck-through prices.
 - date: the one transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. If several dates are printed, use the payment, transaction, order, invoice or issue date. Never a travel, check-in/check-out, booking period, return, expiry, validity or print date, and never a date range.
 - time: HH:MM, 24-hour, the transaction time printed on the receipt (6:19 PM -> "18:19", 01:14 pm -> "13:14", 9:05 AM -> "09:05"). Not printed -> null. Never use a print, opening-hours or validity time.
 - currency: ISO 4217. If no symbol/code, use {{default_currency}}.
-- line_items: one per line; amount = the line total actually charged (after quantity and discounts), not the unit price.
+- line_items: one per item line; amount = the line total charged (after quantity), not the unit price. A discount printed inside an item line is already in its amount: one positive item at the price after the discount. A discount, voucher, promo or rebate printed on its own line is its own line item with a NEGATIVE amount. Only list discounts printed on this receipt. Never list subtotal, total, tax, payment or change lines.
 - category_slug: exactly one of: {{category_slugs}}. Pick the closest fit; "other" only if none fits.
 - confidence: 0..1, your certainty that merchant, date and total are all correct.
 Schema:

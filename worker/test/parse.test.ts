@@ -114,6 +114,19 @@ describe("parseExtraction", () => {
     expect(r.ok && r.value).toMatchObject({ total: 45.2, currency: "SGD", tax: null, payment_method: null, line_items: [] });
   });
 
+  it("makes discount line items negative and leaves other items alone", () => {
+    const line_items = [
+      { description: "Amount", amount: 26759 },
+      { description: "Discount", amount: "2103" },
+      { description: "Voucher", amount: -4.56 },
+      { description: "COFFEE SHAMPOO 35% OFF", amount: 4.69 },
+      { description: "Drop-off fee", amount: 2 },
+      { description: "Bento Rice $3.50 (Discount -$1.00)", amount: 2.5 },
+    ];
+    const r = parseExtraction({ ...valid, line_items });
+    expect(r.ok && r.value.line_items.map((li) => li.amount)).toEqual([26759, -2103, -4.56, -4.69, 2, 2.5]);
+  });
+
   it("defaults a missing time to null and never fails on an unreadable one", () => {
     const plain = parseExtraction(JSON.stringify(valid));
     expect(plain.ok && plain.value.txn_time).toBeNull();

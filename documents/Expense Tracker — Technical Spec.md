@@ -212,19 +212,19 @@ The agent is a single structured-output call per receipt, plus at most one repai
 
 **System prompt (strict, short)**
 
-The first M1 runs showed the model replying in prose, leaving dates as `09/11/2026` and using unit prices for line items. The rules below fix those. A 10-receipt round then showed the model copying example dates into answers and reordering day/month wrongly even when told to prefer DD/MM (09/11/2026 -> 2026-09-11), so it now copies the date exactly as printed and code converts it (see normalisation). The same round added the tax rules (GST-inclusive is still tax; surcharges are not; nothing printed -> null) and the "after discounts and vouchers" total rule. `total_text` asks the model to copy the line it read the total from, so code can check the total (see post-validation); the JSON shape of the schema is appended after them, and the user message repeats "Reply with only the JSON object, starting with `{`".
+The first M1 runs showed the model replying in prose, leaving dates as `09/11/2026` and using unit prices for line items. The rules below fix those. A 10-receipt round then showed the model copying example dates into answers and reordering day/month wrongly even when told to prefer DD/MM (09/11/2026 -> 2026-09-11), so it now copies the date exactly as printed and code converts it (see normalisation). The same round added the tax rules (GST-inclusive is still tax; surcharges are not; nothing printed -> null) and the "after discounts and vouchers" total rule. The Nov 16 run showed discounts still going wrong (positive discount amounts, dropped voucher lines, subtotal taken as total), so the line-item rule now asks for discount lines as negative items and the total rule rules out subtotals. The discount rules carry no example amounts: with them, the model added the example voucher to a receipt that had none. `total_text` asks the model to copy the line it read the total from, so code can check the total (see post-validation); the JSON shape of the schema is appended after them, and the user message repeats "Reply with only the JSON object, starting with `{`".
 
 ```text
 You extract data from a single purchase receipt. Output ONLY one JSON object matching the schema. No prose, no markdown, no code fences. The first character of your reply must be "{" and the last must be "}".
 Rules:
 - Use values printed on the receipt. Never guess. Unknown -> null.
-- total = final amount paid incl. tax and tips, after discounts and vouchers.
+- total = final amount paid incl. tax and tips, after every discount, voucher and promo. Never a subtotal or an amount printed above a discount line.
 - total_text = the line you read total from, copied exactly as printed: its label and amount. Not printed -> null.
 - tax = the tax amount printed (also when prices are tax-inclusive, e.g. "Inclusive of 9% GST ($0.37)" -> 0.37). Fees, surcharges, service charges and discounts are not tax. No tax amount printed -> null, not 0. Ignore struck-through prices.
 - date: the one transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. If several dates are printed, use the payment, transaction, order, invoice or issue date. Never a travel, check-in/check-out, booking period, return, expiry, validity or print date, and never a date range.
 - time: HH:MM, 24-hour, the transaction time printed on the receipt (6:19 PM -> "18:19", 01:14 pm -> "13:14", 9:05 AM -> "09:05"). Not printed -> null. Never use a print, opening-hours or validity time.
 - currency: ISO 4217. If no symbol/code, use {{default_currency}}.
-- line_items: one per line; amount = the line total actually charged (after quantity and discounts), not the unit price.
+- line_items: one per item line; amount = the line total charged (after quantity), not the unit price. A discount printed inside an item line is already in its amount: one positive item at the price after the discount. A discount, voucher, promo or rebate printed on its own line is its own line item with a NEGATIVE amount. Only list discounts printed on this receipt. Never list subtotal, total, tax, payment or change lines.
 - category_slug: exactly one of: {{category_slugs}}. Pick the closest fit; "other" only if none fits.
 - confidence: 0..1, your certainty that merchant, date and total are all correct.
 ```
@@ -253,6 +253,7 @@ const Extraction = z.object({
 
 - Omitted nullable keys (`tax`, `txn_time`, `payment_method`) become `null`; omitted `line_items` becomes `[]`.
 - Numeric strings become numbers; currency is upper-cased.
+- A positive line item whose description names a discount (discount, voucher, coupon, promo, rebate, cashback, "N% off") becomes negative, because the model often drops the printed minus sign. Descriptions that also print a price (`Bento Rice $3.50 (Discount -$1.00)`) are items with the discount already applied and stay positive.
 - `total_text` is trimmed and capped at 200 characters; empty or missing becomes `null`. It is a check field, so it never fails an extraction.
 - `payment_method` is mapped to the enum by keyword ("Apple Pay" -> `ewallet`, "VISA" / "NETS" -> `card`, "PayNow" -> `bank_transfer`); any other string becomes `other`, because payment method must never fail an otherwise good extraction.
 - `txn_date` arrives as printed and becomes `YYYY-MM-DD` in code. All-number dates (`DD/MM/YYYY`, `-`, `.`, two-digit years as 20YY) are day-first unless the second number can only be a day (e.g. `11/25/2026`), or year-first when they start with four digits; the first separated date in the string wins, so trailing POS codes are ignored. Month names set the month (`Sep-03-2026`, `October 27, 2026`, `12 Oct 26`). Compact stamps are `DDMMYY`, `YYYYMMDD` or `DDMMYYYY`, alone or first before POS codes (`070726 19221 0204 8889`). Weekdays and times are dropped. Anything else fails the schema and goes to the repair call; the parse error quotes the copied date (max 32 chars) so eval runs show which format to support.
