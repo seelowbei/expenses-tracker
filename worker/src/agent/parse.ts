@@ -56,7 +56,7 @@ function ymd(year: number, month: number, day: number): string | null {
  * day/month unreliably. All-number dates are day-first per the spec ("prefer DD/MM") unless the
  * second number can only be a day (11/25/2026), or year-first when they start with 4 digits.
  * Month names ("Sep-03-2026", "October 27, 2026", "12 Oct 26") set the month; a 2-digit year
- * is 20YY. Compact stamps are DDMMYY, YYYYMMDD or DDMMYYYY. Weekdays and times are ignored. Anything else is returned as is for the schema to reject.
+ * is 20YY. Compact stamps are DDMMYY, YYYYMMDD or DDMMYYYY, alone or before POS codes. Weekdays and times are ignored. Anything else is returned as is for the schema to reject.
  */
 export function normalizeDate(raw: string): string {
   const s = raw.trim();
@@ -84,8 +84,9 @@ export function normalizeDate(raw: string): string {
     const yearPos = nums.findIndex((n) => n.length === 4);
     const [day, year] = yearPos === -1 ? [nums[0]!, nums[1]!] : [nums[1 - yearPos]!, nums[yearPos]!];
     out = ymd(fullYear(year), monthIdx + 1, Number(day));
-  } else if (monthIdx === undefined && nums.length === 1 && (nums[0]!.length === 6 || nums[0]!.length === 8)) {
-    // Compact POS stamps: DDMMYY ("070726"), YYYYMMDD ("20260707") or DDMMYYYY ("07072026").
+  } else if (monthIdx === undefined && nums.length > 0 && tokens[0] === nums[0] && (nums[0]!.length === 6 || nums[0]!.length === 8)) {
+    // Compact POS stamps: DDMMYY ("070726"), YYYYMMDD ("20260707") or DDMMYYYY ("07072026"),
+    // alone or first, followed by POS codes ("070726 19221 0204 8889").
     const n = nums[0]!;
     const ymdFirst = n.length === 8 && /^(19|20)/.test(n) && Number(n.slice(4, 6)) <= 12;
     out = ymdFirst
@@ -139,9 +140,15 @@ export function normalizePaymentMethod(raw: unknown): PaymentMethod | null {
 const NUMERIC =/^-?\d+(\.\d+)?$/;
 const toNumber = (v: unknown) => (typeof v === "string" && NUMERIC.test(v.trim()) ? Number(v.trim()) : v);
 
+// Line items that reduce the bill. The model often copies the printed amount without its minus sign.
+const DISCOUNT_ITEM = /discount|voucher|coupon|promo|rebate|cashback|\d\s*%\s*off\b/i;
+// A price in the description ("Bento Rice $3.50 (Discount -$1.00)") marks an item with the discount
+// already applied, not a discount line.
+const PRICE_IN_TEXT = /\d\.\d{2}\b/;
+
 // Mechanical clean-up only: fill omitted nullable keys, coerce numeric strings, upper-case currency,
 // reformat printed dates (spec's day-first rule) and times (24-hour; unreadable -> null),
-// map payment methods to the enum (unknown -> "other").
+// map payment methods to the enum (unknown -> "other"), make discount line items negative.
 function normalize(raw: unknown): unknown {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
   const o: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
@@ -157,9 +164,13 @@ function normalize(raw: unknown): unknown {
   o.txn_time = normalizeTime(o.txn_time);
   if (typeof o.merchant === "string") o.merchant = o.merchant.trim();
   if (Array.isArray(o.line_items)) {
-    o.line_items = o.line_items.map((li) =>
-      typeof li === "object" && li !== null ? { ...li, amount: toNumber((li as { amount?: unknown }).amount) } : li,
-    );
+    o.line_items = o.line_items.map((li) => {
+      if (typeof li !== "object" || li === null) return li;
+      const { description, amount } = li as { description?: unknown; amount?: unknown };
+      const n = toNumber(amount);
+      const discount = typeof n === "number" && n > 0 && typeof description === "string" && DISCOUNT_ITEM.test(description) && !PRICE_IN_TEXT.test(description);
+      return { ...li, amount: discount ? -n : n };
+    });
   }
   return o;
 }

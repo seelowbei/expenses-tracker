@@ -4,8 +4,8 @@
 // into a deployed config, since a deployed APP_ORIGIN is always an https public host.
 import { Hono } from "hono";
 import { DEFAULT_CATEGORIES } from "../agent/categories";
-import { aiClient, extractReceipt, VISION_MODEL, type ImageMode, type ReceiptInput } from "../agent/extract";
-import { summarizeUsage } from "../agent/usage";
+import { aiClient, extractReceipt, LLAMA_VISION_MODEL, VISION_MODEL, type ImageMode, type ReceiptInput } from "../agent/extract";
+import { MODEL_RATES, summarizeUsage } from "../agent/usage";
 import type { Bindings } from "../env";
 import { MAX_UPLOAD_BYTES, sniffMime } from "../lib/sniff";
 
@@ -31,10 +31,10 @@ devRoutes.use("*", async (c, next) => {
 // Workers AI confirms the license by throwing "5016: Thank you for agreeing to this model's terms...".
 const LICENSE_ACCEPTED = /\b5016\b/;
 
-/** One-time acceptance of Meta's Llama 3.2 license for this Cloudflare account. */
+/** One-time acceptance of Meta's Llama 3.2 license, needed only to compare against it with `eval --model`. */
 devRoutes.post("/agree", async (c) => {
   try {
-    const out = await c.env.AI.run(VISION_MODEL, { prompt: "agree" });
+    const out = await c.env.AI.run(LLAMA_VISION_MODEL, { prompt: "agree" });
     // Already accepted earlier: the model just answers the prompt.
     return c.json({ ok: true, status: "already_accepted", response: (out as { response?: unknown }).response ?? null });
   } catch (e) {
@@ -44,7 +44,7 @@ devRoutes.post("/agree", async (c) => {
   }
 });
 
-/** Multipart `file` (JPEG/PNG/PDF). Optional `imageMode` = data_url | bytes. */
+/** Multipart `file` (JPEG/PNG/PDF). Optional `imageMode` = data_url | bytes; optional `model`, one of MODEL_RATES. */
 devRoutes.post("/extract", async (c) => {
   let form: FormData;
   try {
@@ -62,6 +62,9 @@ devRoutes.post("/extract", async (c) => {
 
   const modeParam = form.get("imageMode");
   const imageMode: ImageMode = modeParam === "bytes" ? "bytes" : "data_url";
+  const modelParam = form.get("model");
+  if (typeof modelParam === "string" && modelParam !== "" && !(modelParam in MODEL_RATES)) return c.json({ error: "unknown_model" }, 400);
+  const model = typeof modelParam === "string" && modelParam !== "" ? modelParam : VISION_MODEL;
   const input: ReceiptInput = mime === "application/pdf" ? { kind: "pdf", bytes } : { kind: "image", mimeType: mime, bytes };
 
   const started = Date.now();
@@ -71,12 +74,14 @@ devRoutes.post("/extract", async (c) => {
     locale: "en-SG",
     today: new Date().toISOString().slice(0, 10),
     imageMode,
+    model,
   });
 
   return c.json({
     mime,
     sizeBytes: bytes.length,
     imageMode,
+    model,
     elapsedMs: Date.now() - started,
     usage: summarizeUsage(result.calls),
     result,

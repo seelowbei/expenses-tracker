@@ -28,7 +28,7 @@ const good = JSON.stringify({
 
 const usage = { prompt_tokens: 6800, completion_tokens: 100 };
 
-type Reply = string | Error | { response: string; usage?: object };
+type Reply = string | Error | { response: string; usage?: object } | { choices: { message: { content: string } }[]; usage?: object };
 
 function fakeAi(replies: Reply[], markdown?: { format: string; data?: string; error?: string; tokens?: number }) {
   const calls: Record<string, unknown>[] = [];
@@ -85,7 +85,14 @@ describe("extractReceipt", () => {
       outcome: "ok",
       errorCode: null,
     });
-    expect(rec!.neuronsEst).toBeCloseTo(6800 * (0.0485 / 0.011 / 1000) + 100 * (0.676 / 0.011 / 1000), 6);
+    expect(rec!.neuronsEst).toBeCloseTo(6800 * (0.1 / 0.011 / 1000) + 100 * (0.3 / 0.011 / 1000), 6);
+  });
+
+  it("turns off Gemma 4 reasoning and reads OpenAI-style replies", async () => {
+    const { ai, calls } = fakeAi([{ choices: [{ message: { content: good } }], usage }]);
+    const r = await extractReceipt(ai, jpeg, ctx);
+    expect(r.ok && r.status).toBe("done");
+    expect(calls[0]!.chat_template_kwargs).toEqual({ enable_thinking: false });
   });
 
   it("leaves neurons unknown when the model returns no usage", async () => {

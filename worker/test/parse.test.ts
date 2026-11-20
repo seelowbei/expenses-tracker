@@ -61,13 +61,16 @@ describe("normalizeDate", () => {
     expect(normalizeDate("070726")).toBe("2026-07-07");
     expect(normalizeDate("20260707")).toBe("2026-07-07");
     expect(normalizeDate("07072026")).toBe("2026-07-07");
+    expect(normalizeDate("070726 19221 0204 19:31:55 8889")).toBe("2026-07-07");
   });
 
   it("leaves unreadable dates for the schema to reject", () => {
     expect(normalizeDate("123456789")).toBe("123456789");
     expect(normalizeDate("071326")).toBe("071326");
+    expect(normalizeDate("Receipt 070726")).toBe("Receipt 070726");
     expect(normalizeDate("32/13/2026")).toBe("32/13/2026");
     expect(normalizeDate("yesterday")).toBe("yesterday");
+    expect(normalizeDate("??")).toBe("??");
   });
 });
 
@@ -109,6 +112,19 @@ describe("parseExtraction", () => {
     const { tax: _t, payment_method: _p, line_items: _l, ...rest } = valid;
     const r = parseExtraction(JSON.stringify({ ...rest, total: "45.20", currency: "sgd", confidence: "0.9" }));
     expect(r.ok && r.value).toMatchObject({ total: 45.2, currency: "SGD", tax: null, payment_method: null, line_items: [] });
+  });
+
+  it("makes discount line items negative and leaves other items alone", () => {
+    const line_items = [
+      { description: "Amount", amount: 26759 },
+      { description: "Discount", amount: "2103" },
+      { description: "Voucher", amount: -4.56 },
+      { description: "COFFEE SHAMPOO 35% OFF", amount: 4.69 },
+      { description: "Drop-off fee", amount: 2 },
+      { description: "Bento Rice $3.50 (Discount -$1.00)", amount: 2.5 },
+    ];
+    const r = parseExtraction({ ...valid, line_items });
+    expect(r.ok && r.value.line_items.map((li) => li.amount)).toEqual([26759, -2103, -4.56, -4.69, 2, 2.5]);
   });
 
   it("defaults a missing time to null and never fails on an unreadable one", () => {

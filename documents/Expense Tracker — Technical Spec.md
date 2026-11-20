@@ -52,7 +52,7 @@ The stack is a static SPA with a Hono API on a single Worker. It avoids server r
 | Auth | `oauth4webapi` (Google OAuth/OIDC, PKCE) + own session table | Small, dependency-free, Web Crypto only; full control over refresh tokens |
 | Database | Cloudflare D1 + Drizzle ORM | SQLite with typed queries; migrations via Wrangler |
 | Async jobs | Cloudflare Queues (producer + consumer in the same Worker) | Decouples slow AI calls from the upload request |
-| AI | Workers AI: `@cf/meta/llama-3.2-11b-vision-instruct` for images; `env.AI.toMarkdown()` + a text LLM for PDFs | Free 10,000 neurons/day; no external API key |
+| AI | Workers AI: `@cf/google/gemma-4-26b-a4b-it` for images (thinking off); `env.AI.toMarkdown()` + a text LLM for PDFs | Free 10,000 neurons/day; no external API key |
 | File storage | Google Drive API v3, `drive.file` scope | Uses the user's own quota; costs $0 |
 | Validation | Zod (request bodies + LLM output schema) | One schema for both API and agent output |
 | Tooling | Wrangler, pnpm, Vitest + `@cloudflare/vitest-plugin` (formerly `vitest-pool-workers`), GitHub Actions | Local emulation of D1/Queues; CI deploys |
@@ -141,7 +141,7 @@ CREATE TABLE ai_usage (
   receipt_id        TEXT REFERENCES receipts(id) ON DELETE SET NULL, -- usage history outlives the receipt
   attempt           INTEGER NOT NULL,          -- receipts.attempts when the call was made
   kind              TEXT NOT NULL,             -- extract | repair | to_markdown
-  model             TEXT NOT NULL,             -- e.g. @cf/meta/llama-3.2-11b-vision-instruct, toMarkdown
+  model             TEXT NOT NULL,             -- e.g. @cf/google/gemma-4-26b-a4b-it, toMarkdown
   input_mode        TEXT,                      -- image | pdf_text
   prompt_tokens     INTEGER,                   -- NULL when the model returns no usage block
   completion_tokens INTEGER,
@@ -204,27 +204,29 @@ Uploads return as soon as the file is saved to Drive and queued. Extraction then
 
 The agent is a single structured-output call per receipt, plus at most one repair call; it uses no tools and no conversation loop. One model serves both paths, so the prompt and schema are shared and tested once.
 
+**Model (Nov 20, 2026):** `@cf/google/gemma-4-26b-a4b-it` replaced `@cf/meta/llama-3.2-11b-vision-instruct`. On the 12-receipt eval, Llama 3.2 reached 91.7% on total and date but kept merging a discount row into the item above it and dropping vouchers. Gemma 4 scored 100% on total and date in two runs, extracted the discount receipts' line items correctly, needed no repair calls, and cost about 14 neurons per receipt instead of about 38 (from its reported tokens). Llama 4 Scout was slower (~43 s), costlier (~90 neurons) and less accurate. Gemma 4 reasons by default and spends the whole token budget doing so, so every call sends `chat_template_kwargs: { enable_thinking: false }`; it replies OpenAI-style (`choices[0].message.content`), which the agent reads alongside the older `response` field. The eval can still run other models with `--model` (dev routes only).
+
 | Input | Pre-processing | Model call |
 | --- | --- | --- |
-| Image (JPG/PNG) | Resized in the browser | `@cf/meta/llama-3.2-11b-vision-instruct` with the image + prompt |
+| Image (JPG/PNG) | Resized in the browser | `@cf/google/gemma-4-26b-a4b-it` with the image + prompt |
 | PDF (text) | `env.AI.toMarkdown()` | Same model, text-only, with the markdown + prompt |
 | PDF (scanned) | Empty markdown | v1: fail with a clear message; v2: render page 1 to an image client-side |
 
 **System prompt (strict, short)**
 
-The first M1 runs showed the model replying in prose, leaving dates as `09/11/2026` and using unit prices for line items. The rules below fix those. A 10-receipt round then showed the model copying example dates into answers and reordering day/month wrongly even when told to prefer DD/MM (09/11/2026 -> 2026-09-11), so it now copies the date exactly as printed and code converts it (see normalisation). The same round added the tax rules (GST-inclusive is still tax; surcharges are not; nothing printed -> null) and the "after discounts and vouchers" total rule. `total_text` asks the model to copy the line it read the total from, so code can check the total (see post-validation); the JSON shape of the schema is appended after them, and the user message repeats "Reply with only the JSON object, starting with `{`".
+The first M1 runs showed the model replying in prose, leaving dates as `09/11/2026` and using unit prices for line items. The rules below fix those. A 10-receipt round then showed the model copying example dates into answers and reordering day/month wrongly even when told to prefer DD/MM (09/11/2026 -> 2026-09-11), so it now copies the date exactly as printed and code converts it (see normalisation). The same round added the tax rules (GST-inclusive is still tax; surcharges are not; nothing printed -> null) and the "after discounts and vouchers" total rule. The Nov 16 run showed discounts still going wrong (positive discount amounts, dropped voucher lines, subtotal taken as total), so the line-item rule now asks for discount lines as negative items and the total rule rules out subtotals. The discount rules carry no example amounts: with them, the model added the example voucher to a receipt that had none. `total_text` asks the model to copy the line it read the total from, so code can check the total (see post-validation); the JSON shape of the schema is appended after them, and the user message repeats "Reply with only the JSON object, starting with `{`".
 
 ```text
 You extract data from a single purchase receipt. Output ONLY one JSON object matching the schema. No prose, no markdown, no code fences. The first character of your reply must be "{" and the last must be "}".
 Rules:
 - Use values printed on the receipt. Never guess. Unknown -> null.
-- total = final amount paid incl. tax and tips, after discounts and vouchers.
+- total = final amount paid incl. tax and tips, after every discount, voucher and promo. Never a subtotal or an amount printed above a discount line.
 - total_text = the line you read total from, copied exactly as printed: its label and amount. Not printed -> null.
 - tax = the tax amount printed (also when prices are tax-inclusive, e.g. "Inclusive of 9% GST ($0.37)" -> 0.37). Fees, surcharges, service charges and discounts are not tax. No tax amount printed -> null, not 0. Ignore struck-through prices.
 - date: the one transaction date copied exactly as printed, with the year. Keep the printed order and separators; do not reorder or reformat it. If several dates are printed, use the payment, transaction, order, invoice or issue date. Never a travel, check-in/check-out, booking period, return, expiry, validity or print date, and never a date range.
 - time: HH:MM, 24-hour, the transaction time printed on the receipt (6:19 PM -> "18:19", 01:14 pm -> "13:14", 9:05 AM -> "09:05"). Not printed -> null. Never use a print, opening-hours or validity time.
 - currency: ISO 4217. If no symbol/code, use {{default_currency}}.
-- line_items: one per line; amount = the line total actually charged (after quantity and discounts), not the unit price.
+- line_items: one per item line; amount = the line total charged (after quantity), not the unit price. A discount printed inside an item line is already in its amount: one positive item at the price after the discount. A discount, voucher, promo or rebate printed on its own line is its own line item with a NEGATIVE amount. Only list discounts printed on this receipt. Never list subtotal, total, tax, payment or change lines.
 - category_slug: exactly one of: {{category_slugs}}. Pick the closest fit; "other" only if none fits.
 - confidence: 0..1, your certainty that merchant, date and total are all correct.
 ```
@@ -253,9 +255,10 @@ const Extraction = z.object({
 
 - Omitted nullable keys (`tax`, `txn_time`, `payment_method`) become `null`; omitted `line_items` becomes `[]`.
 - Numeric strings become numbers; currency is upper-cased.
+- A positive line item whose description names a discount (discount, voucher, coupon, promo, rebate, cashback, "N% off") becomes negative, because the model often drops the printed minus sign. Descriptions that also print a price (`Bento Rice $3.50 (Discount -$1.00)`) are items with the discount already applied and stay positive.
 - `total_text` is trimmed and capped at 200 characters; empty or missing becomes `null`. It is a check field, so it never fails an extraction.
 - `payment_method` is mapped to the enum by keyword ("Apple Pay" -> `ewallet`, "VISA" / "NETS" -> `card`, "PayNow" -> `bank_transfer`); any other string becomes `other`, because payment method must never fail an otherwise good extraction.
-- `txn_date` arrives as printed and becomes `YYYY-MM-DD` in code. All-number dates (`DD/MM/YYYY`, `-`, `.`, two-digit years as 20YY) are day-first unless the second number can only be a day (e.g. `11/25/2026`), or year-first when they start with four digits; the first separated date in the string wins, so trailing POS codes are ignored. Month names set the month (`Sep-03-2026`, `October 27, 2026`, `12 Oct 26`). Compact stamps are `DDMMYY`, `YYYYMMDD` or `DDMMYYYY`. Weekdays and times are dropped. Anything else fails the schema and goes to the repair call; the parse error quotes the copied date (max 32 chars) so eval runs show which format to support.
+- `txn_date` arrives as printed and becomes `YYYY-MM-DD` in code. All-number dates (`DD/MM/YYYY`, `-`, `.`, two-digit years as 20YY) are day-first unless the second number can only be a day (e.g. `11/25/2026`), or year-first when they start with four digits; the first separated date in the string wins, so trailing POS codes are ignored. Month names set the month (`Sep-03-2026`, `October 27, 2026`, `12 Oct 26`). Compact stamps are `DDMMYY`, `YYYYMMDD` or `DDMMYYYY`, alone or first before POS codes (`070726 19221 0204 8889`). Weekdays and times are dropped. Anything else fails the schema and goes to the repair call; the parse error quotes the copied date (max 32 chars) so eval runs show which format to support.
 - Times: `6:19 PM` / `06:19pm` become `18:19`; `18:19:42` drops the seconds. A time that still doesn't parse becomes `null`, because time is optional and must never fail an otherwise good extraction.
 
 **Post-validation rules (code, not LLM)**
@@ -519,7 +522,7 @@ Wrangler is no longer the deployment source. It runs local dev, bundles the Work
 
 1. Pulumi: `pulumi login` (Pulumi Cloud), then `pulumi stack init staging` and `pulumi stack init production` in both `infrastructure/foundation` and `infrastructure/services`.
 2. Foundation: `pulumi config set accountId <id>` per stack, then `pulumi up -s staging` and `pulumi up -s production`. Copy each `d1DatabaseId` output into the matching `env` block of `wrangler.jsonc`.
-3. Workers AI: send one request with the prompt `agree` to `@cf/meta/llama-3.2-11b-vision-instruct` to accept Meta's license for the account.
+3. Workers AI: no license step for Gemma 4. Only to compare against Llama 3.2 in the eval, accept Meta's license once with `POST /api/dev/agree`.
 4. Google Cloud: create a project, enable the Drive API, and configure the OAuth consent screen (External; add both accounts as test users and leave it in Testing mode, since the test-user list is the access control). Use scopes `openid`, `email`, `profile`, `drive.file`.
 5. Create two OAuth Web clients (dev, prod) with redirect URIs `http://localhost:8787/auth/google/callback`, `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` and the production origin's `/auth/google/callback`.
 6. Services: set `appOrigin` and the secrets for each stack.

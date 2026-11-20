@@ -13,8 +13,21 @@ import {
 } from "./usage";
 import { postValidate, type LedgerDraft, type ReviewReason } from "./validate";
 
-export const VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
+// Chosen over Llama 3.2 11B Vision on the Nov 20, 2026 eval (spec, "Extraction agent").
+export const VISION_MODEL = "@cf/google/gemma-4-26b-a4b-it";
+/** The previous model, kept as an eval comparison (`--model`). */
+export const LLAMA_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
 const MAX_TOKENS = 1024; // up to 50 line items
+// Per-model extra input. Gemma 4 reasons by default and would spend MAX_TOKENS thinking, leaving no answer.
+const MODEL_INPUT: Record<string, Record<string, unknown>> = {
+  [VISION_MODEL]: { chat_template_kwargs: { enable_thinking: false } },
+};
+
+/** Workers AI replies in `response`, or OpenAI-style in `choices[0].message.content` (newer models). */
+function replyText(out: unknown): unknown {
+  const o = out as { response?: unknown; choices?: { message?: { content?: unknown } }[] } | null;
+  return o?.response ?? o?.choices?.[0]?.message?.content ?? "";
+}
 const MAX_MARKDOWN_CHARS = 20_000;
 
 /** Minimal slice of the Workers AI binding, so tests can pass a fake. */
@@ -44,6 +57,8 @@ export interface ExtractContext {
   locale: string;
   today: string; // YYYY-MM-DD, UTC
   imageMode?: ImageMode;
+  /** Eval only: another vision model to compare against VISION_MODEL. Production never sets it. */
+  model?: string;
   /** Injectable clock for latency; defaults to Date.now. */
   now?: () => number;
 }
@@ -93,6 +108,7 @@ export async function extractReceipt(ai: AiClient, input: ReceiptInput, ctx: Ext
   const t: Telemetry = { calls: [], replies: [] };
   const inputMode: InputMode = input.kind === "pdf" ? "pdf_text" : "image";
   const system = renderSystemPrompt(ctx);
+  const model = ctx.model ?? VISION_MODEL;
 
   let messages: Message[];
   let extra: Record<string, unknown> = {};
@@ -137,21 +153,21 @@ export async function extractReceipt(ai: AiClient, input: ReceiptInput, ctx: Ext
     const started = now();
     let out: unknown;
     try {
-      out = await ai.run(VISION_MODEL, { messages: msgs, ...extra, max_tokens: MAX_TOKENS, temperature: 0 });
+      out = await ai.run(model, { messages: msgs, ...extra, ...MODEL_INPUT[model], max_tokens: MAX_TOKENS, temperature: 0 });
     } catch (e) {
       const { outcome, errorCode } = classifyAiError(e);
       t.calls.push({
-        kind, model: VISION_MODEL, inputMode, promptTokens: null, completionTokens: null,
+        kind, model, inputMode, promptTokens: null, completionTokens: null,
         neuronsEst: null, latencyMs: now() - started, outcome, errorCode,
       });
       throw new AiCallFailed(outcome === "quota_exceeded" ? "quota_exceeded" : "ai_error", (e as Error).message);
     }
-    const reply = (out as { response?: unknown } | null)?.response ?? "";
+    const reply = replyText(out);
     const parsed = parseExtraction(reply);
     const { promptTokens, completionTokens } = tokensFrom(out);
     t.calls.push({
-      kind, model: VISION_MODEL, inputMode, promptTokens, completionTokens,
-      neuronsEst: estimateNeurons(VISION_MODEL, promptTokens, completionTokens),
+      kind, model, inputMode, promptTokens, completionTokens,
+      neuronsEst: estimateNeurons(model, promptTokens, completionTokens),
       latencyMs: now() - started,
       outcome: parsed.ok ? "ok" : "invalid_output",
       errorCode: parsed.ok ? null : "invalid_output",
