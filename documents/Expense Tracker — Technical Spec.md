@@ -169,7 +169,7 @@ Uploads return as soon as the file is saved to Drive and queued. Extraction then
 1. `GET /auth/google` creates `state` and a PKCE `code_verifier`, stores both in a short-lived signed cookie, and redirects to Google with scopes `openid email profile https://www.googleapis.com/auth/drive.file`, `access_type=offline` and `prompt=consent`. `prompt=consent` only needs to be sent on first login or when no refresh token is stored.
 2. `GET /auth/google/callback` verifies `state`, exchanges the code, and validates the ID token (`iss`, `aud`, `exp`, `email_verified`).
 3. Upsert `users` by `google_sub`. Encrypt the refresh token with AES-GCM using `TOKEN_ENC_KEY` and store it.
-4. If `drive_folder_id` is empty, create the `Expense Receipts` folder in Drive and save its id.
+4. If `drive_folder_id` is empty, create the folder in Drive and save its id. Its name comes from `DRIVE_FOLDER_NAME`: `Expense Receipts` in production, `Expense Receipts (<env>)` elsewhere, because testers use the same Google accounts in every environment.
 5. Create a session: a random 32-byte token goes in an `HttpOnly; Secure; SameSite=Lax` cookie named `__Host-session` (Path=/, no Domain), its SHA-256 is stored in `sessions`, and it expires after 30 days with sliding renewal.
 
 **2. Upload a receipt**
@@ -480,7 +480,7 @@ expense-tracker/
 | `expense-foundation` | `D1Database` (protected), `Queue` receipts + DLQ | Exports account id, D1 id/name, queue id/name, DLQ name | Manually, on change |
 | `expense-services` | `WorkersScript` (bundle + `web/dist` assets + bindings), `QueueConsumer`, `WorkersScriptSubdomain`, optional `WorkersCustomDomain` | Reads foundation outputs via `StackReference` to the same stack name | CI on every deploy |
 
-The `services` stack sets the deployed bindings: `AI`, `DB`, `RECEIPT_QUEUE`, `APP_ORIGIN`, `DEFAULT_CURRENCY` and the secrets. The queue consumer uses `batchSize: 1`, `maxRetries: 3` and the DLQ. The services stack also defines the Worker's daily Cron Trigger (`5 0 * * *`), which `wrangler.jsonc` mirrors locally under `triggers.crons`. With a batch size of 1, each receipt runs in its own invocation, so its CPU budget and failure stay separate from other receipts.
+The `services` stack sets the deployed bindings: `AI`, `DB`, `RECEIPT_QUEUE`, `APP_ORIGIN`, `DEFAULT_CURRENCY`, `DRIVE_FOLDER_NAME` and the secrets. The queue consumer uses `batchSize: 1`, `maxRetries: 3` and the DLQ. The services stack also defines the Worker's daily Cron Trigger (`5 0 * * *`), which `wrangler.jsonc` mirrors locally under `triggers.crons`. With a batch size of 1, each receipt runs in its own invocation, so its CPU budget and failure stay separate from other receipts.
 
 **wrangler.jsonc (abridged)**
 

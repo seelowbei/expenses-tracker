@@ -107,7 +107,7 @@ authRoutes.get("/google/callback", async (c) => {
 
   cacheAccessToken(user.id, result.accessToken, result.expiresIn);
   try {
-    await ensureFolder(db, user, driveApi(result.accessToken, c.var.deps.fetch));
+    await ensureFolder(db, user, driveApi(result.accessToken, c.var.deps.fetch), c.env.DRIVE_FOLDER_NAME);
   } catch (e) {
     // Not fatal: the upload path creates the folder if it is still missing.
     log("drive_folder_failed", { code: e instanceof DriveError ? e.message : "unknown" });

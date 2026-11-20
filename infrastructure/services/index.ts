@@ -82,6 +82,13 @@ const worker = new cloudflare.WorkersScript("worker", {
     { type: "queue", name: "RECEIPT_QUEUE", queueName: receiptQueueName },
     { type: "plain_text", name: "APP_ORIGIN", text: config.require("appOrigin") },
     { type: "plain_text", name: "DEFAULT_CURRENCY", text: config.get("defaultCurrency") ?? "SGD" },
+    // Testers share Google accounts across environments, so non-production folders carry the env name.
+    // Only names folders created from now on; existing folders keep theirs (rename them in Drive).
+    {
+      type: "plain_text",
+      name: "DRIVE_FOLDER_NAME",
+      text: config.get("driveFolderName") ?? (env === "production" ? "Expense Receipts" : `Expense Receipts (${env})`),
+    },
     { type: "secret_text", name: "GOOGLE_CLIENT_ID", text: secret("googleClientId") },
     { type: "secret_text", name: "GOOGLE_CLIENT_SECRET", text: secret("googleClientSecret") },
     { type: "secret_text", name: "TOKEN_ENC_KEY", text: secret("tokenEncKey") },

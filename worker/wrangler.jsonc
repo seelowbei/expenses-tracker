@@ -28,8 +28,9 @@
   // Fire locally with `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=5+0+*+*+*"`
   // (`/__scheduled` is served by the SPA assets, which run before the Worker for that path).
   "triggers": { "crons": ["5 0 * * *"] },
+  // DRIVE_FOLDER_NAME names new Drive folders per environment (Pulumi sets staging/production).
   // Local only. DEV_ROUTES enables /api/dev/* (M1 extraction spike); Pulumi never sets it.
-  "vars": { "APP_ORIGIN": "http://localhost:8787", "DEFAULT_CURRENCY": "SGD", "DEV_ROUTES": "true" },
+  "vars": { "APP_ORIGIN": "http://localhost:8787", "DEFAULT_CURRENCY": "SGD", "DEV_ROUTES": "true", "DRIVE_FOLDER_NAME": "Expense Receipts (local)" },
   "observability": { "enabled": true },
   "env": {
     // Only so `wrangler d1 migrations apply expense-<env> --env <env> --remote` can find each database.

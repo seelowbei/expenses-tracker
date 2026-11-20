@@ -197,12 +197,12 @@ receiptRoutes.post("/", async (c) => {
     uploaded = await withDrive(c.env, c.var.deps, db, user, async (drive) => {
       const upload = async (parentId: string) =>
         drive.uploadMultipart({ name: driveFileName(r.createdAt, r.id, mime), mimeType: mime, parentId, body: file });
-      const folderId = await ensureFolder(db, user, drive);
+      const folderId = await ensureFolder(db, user, drive, c.env.DRIVE_FOLDER_NAME);
       try {
         return await upload(folderId);
       } catch (e) {
         // The user deleted the folder: recreate it once and retry.
-        if (e instanceof DriveError && e.kind === "not_found") return upload(await ensureFolder(db, user, drive, true));
+        if (e instanceof DriveError && e.kind === "not_found") return upload(await ensureFolder(db, user, drive, c.env.DRIVE_FOLDER_NAME, true));
         throw e;
       }
     });
