@@ -56,7 +56,7 @@ function ymd(year: number, month: number, day: number): string | null {
  * day/month unreliably. All-number dates are day-first per the spec ("prefer DD/MM") unless the
  * second number can only be a day (11/25/2026), or year-first when they start with 4 digits.
  * Month names ("Sep-03-2026", "October 27, 2026", "12 Oct 26") set the month; a 2-digit year
- * is 20YY. Compact stamps are DDMMYY, YYYYMMDD or DDMMYYYY. Weekdays and times are ignored. Anything else is returned as is for the schema to reject.
+ * is 20YY. Compact stamps are DDMMYY, YYYYMMDD or DDMMYYYY, alone or before POS codes. Weekdays and times are ignored. Anything else is returned as is for the schema to reject.
  */
 export function normalizeDate(raw: string): string {
   const s = raw.trim();
@@ -84,8 +84,9 @@ export function normalizeDate(raw: string): string {
     const yearPos = nums.findIndex((n) => n.length === 4);
     const [day, year] = yearPos === -1 ? [nums[0]!, nums[1]!] : [nums[1 - yearPos]!, nums[yearPos]!];
     out = ymd(fullYear(year), monthIdx + 1, Number(day));
-  } else if (monthIdx === undefined && nums.length === 1 && (nums[0]!.length === 6 || nums[0]!.length === 8)) {
-    // Compact POS stamps: DDMMYY ("070726"), YYYYMMDD ("20260707") or DDMMYYYY ("07072026").
+  } else if (monthIdx === undefined && nums.length > 0 && tokens[0] === nums[0] && (nums[0]!.length === 6 || nums[0]!.length === 8)) {
+    // Compact POS stamps: DDMMYY ("070726"), YYYYMMDD ("20260707") or DDMMYYYY ("07072026"),
+    // alone or first, followed by POS codes ("070726 19221 0204 8889").
     const n = nums[0]!;
     const ymdFirst = n.length === 8 && /^(19|20)/.test(n) && Number(n.slice(4, 6)) <= 12;
     out = ymdFirst

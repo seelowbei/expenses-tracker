@@ -61,13 +61,16 @@ describe("normalizeDate", () => {
     expect(normalizeDate("070726")).toBe("2026-07-07");
     expect(normalizeDate("20260707")).toBe("2026-07-07");
     expect(normalizeDate("07072026")).toBe("2026-07-07");
+    expect(normalizeDate("070726 19221 0204 19:31:55 8889")).toBe("2026-07-07");
   });
 
   it("leaves unreadable dates for the schema to reject", () => {
     expect(normalizeDate("123456789")).toBe("123456789");
     expect(normalizeDate("071326")).toBe("071326");
+    expect(normalizeDate("Receipt 070726")).toBe("Receipt 070726");
     expect(normalizeDate("32/13/2026")).toBe("32/13/2026");
     expect(normalizeDate("yesterday")).toBe("yesterday");
+    expect(normalizeDate("??")).toBe("??");
   });
 });
 
