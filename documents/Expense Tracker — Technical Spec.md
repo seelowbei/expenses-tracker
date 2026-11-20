@@ -52,7 +52,7 @@ The stack is a static SPA with a Hono API on a single Worker. It avoids server r
 | Auth | `oauth4webapi` (Google OAuth/OIDC, PKCE) + own session table | Small, dependency-free, Web Crypto only; full control over refresh tokens |
 | Database | Cloudflare D1 + Drizzle ORM | SQLite with typed queries; migrations via Wrangler |
 | Async jobs | Cloudflare Queues (producer + consumer in the same Worker) | Decouples slow AI calls from the upload request |
-| AI | Workers AI: `@cf/meta/llama-3.2-11b-vision-instruct` for images; `env.AI.toMarkdown()` + a text LLM for PDFs | Free 10,000 neurons/day; no external API key |
+| AI | Workers AI: `@cf/google/gemma-4-26b-a4b-it` for images (thinking off); `env.AI.toMarkdown()` + a text LLM for PDFs | Free 10,000 neurons/day; no external API key |
 | File storage | Google Drive API v3, `drive.file` scope | Uses the user's own quota; costs $0 |
 | Validation | Zod (request bodies + LLM output schema) | One schema for both API and agent output |
 | Tooling | Wrangler, pnpm, Vitest + `@cloudflare/vitest-plugin` (formerly `vitest-pool-workers`), GitHub Actions | Local emulation of D1/Queues; CI deploys |
@@ -141,7 +141,7 @@ CREATE TABLE ai_usage (
   receipt_id        TEXT REFERENCES receipts(id) ON DELETE SET NULL, -- usage history outlives the receipt
   attempt           INTEGER NOT NULL,          -- receipts.attempts when the call was made
   kind              TEXT NOT NULL,             -- extract | repair | to_markdown
-  model             TEXT NOT NULL,             -- e.g. @cf/meta/llama-3.2-11b-vision-instruct, toMarkdown
+  model             TEXT NOT NULL,             -- e.g. @cf/google/gemma-4-26b-a4b-it, toMarkdown
   input_mode        TEXT,                      -- image | pdf_text
   prompt_tokens     INTEGER,                   -- NULL when the model returns no usage block
   completion_tokens INTEGER,
@@ -204,9 +204,11 @@ Uploads return as soon as the file is saved to Drive and queued. Extraction then
 
 The agent is a single structured-output call per receipt, plus at most one repair call; it uses no tools and no conversation loop. One model serves both paths, so the prompt and schema are shared and tested once.
 
+**Model (Nov 20, 2026):** `@cf/google/gemma-4-26b-a4b-it` replaced `@cf/meta/llama-3.2-11b-vision-instruct`. On the 12-receipt eval, Llama 3.2 reached 91.7% on total and date but kept merging a discount row into the item above it and dropping vouchers. Gemma 4 scored 100% on total and date in two runs, extracted the discount receipts' line items correctly, needed no repair calls, and cost about 14 neurons per receipt instead of about 38 (from its reported tokens). Llama 4 Scout was slower (~43 s), costlier (~90 neurons) and less accurate. Gemma 4 reasons by default and spends the whole token budget doing so, so every call sends `chat_template_kwargs: { enable_thinking: false }`; it replies OpenAI-style (`choices[0].message.content`), which the agent reads alongside the older `response` field. The eval can still run other models with `--model` (dev routes only).
+
 | Input | Pre-processing | Model call |
 | --- | --- | --- |
-| Image (JPG/PNG) | Resized in the browser | `@cf/meta/llama-3.2-11b-vision-instruct` with the image + prompt |
+| Image (JPG/PNG) | Resized in the browser | `@cf/google/gemma-4-26b-a4b-it` with the image + prompt |
 | PDF (text) | `env.AI.toMarkdown()` | Same model, text-only, with the markdown + prompt |
 | PDF (scanned) | Empty markdown | v1: fail with a clear message; v2: render page 1 to an image client-side |
 
@@ -520,7 +522,7 @@ Wrangler is no longer the deployment source. It runs local dev, bundles the Work
 
 1. Pulumi: `pulumi login` (Pulumi Cloud), then `pulumi stack init staging` and `pulumi stack init production` in both `infrastructure/foundation` and `infrastructure/services`.
 2. Foundation: `pulumi config set accountId <id>` per stack, then `pulumi up -s staging` and `pulumi up -s production`. Copy each `d1DatabaseId` output into the matching `env` block of `wrangler.jsonc`.
-3. Workers AI: send one request with the prompt `agree` to `@cf/meta/llama-3.2-11b-vision-instruct` to accept Meta's license for the account.
+3. Workers AI: no license step for Gemma 4. Only to compare against Llama 3.2 in the eval, accept Meta's license once with `POST /api/dev/agree`.
 4. Google Cloud: create a project, enable the Drive API, and configure the OAuth consent screen (External; add both accounts as test users and leave it in Testing mode, since the test-user list is the access control). Use scopes `openid`, `email`, `profile`, `drive.file`.
 5. Create two OAuth Web clients (dev, prod) with redirect URIs `http://localhost:8787/auth/google/callback`, `https://expense-tracker-staging.<sub>.workers.dev/auth/google/callback` and the production origin's `/auth/google/callback`.
 6. Services: set `appOrigin` and the secrets for each stack.

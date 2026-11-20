@@ -191,7 +191,7 @@ describe("processReceipt: valid extraction", () => {
     const { id, run } = await setup({ mime: "application/pdf" });
     const { ai, calls } = fakeAi([reply()], { format: "markdown", data: "# Receipt\nGrab ride total S$18.40 paid by GrabPay" });
     await run(ai);
-    expect(calls).toEqual(["toMarkdown", "@cf/meta/llama-3.2-11b-vision-instruct"]);
+    expect(calls).toEqual(["toMarkdown", "@cf/google/gemma-4-26b-a4b-it"]);
     expect((await receiptRow(id))!.status).toBe("done");
     expect((await usageFor(id)).map((u) => u.kind).sort()).toEqual(["extract", "to_markdown"]);
   });

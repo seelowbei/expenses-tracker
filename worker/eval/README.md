@@ -1,6 +1,6 @@
 # M1 extraction eval
 
-Measures how well `@cf/meta/llama-3.2-11b-vision-instruct` extracts your receipts before the rest of the app is built on it. **Target: at least 90% on total and date.**
+Measures how well the extraction model (`VISION_MODEL` in `src/agent/extract.ts`, currently `@cf/google/gemma-4-26b-a4b-it`) extracts your receipts. Compare another model with `--model <id>`; it must have a price in `MODEL_RATES` (`src/agent/usage.ts`). **Target: at least 90% on total and date.**
 
 Each receipt goes through the real agent (`src/agent/`) via the local Worker's `/api/dev/extract` route, so the prompt, Zod schema, repair call and post-validation are exactly what production will run.
 
@@ -16,7 +16,7 @@ Or keep it in `worker/.env`, which Wrangler reads automatically and git ignores:
 
 Eval calls count against the free 10,000 neurons/day, which resets at 08:00 SGT.
 
-## 2. Accept the Llama license (once per account)
+## 2. Accept the Llama license (only for `--model @cf/meta/llama-3.2-11b-vision-instruct`)
 
 ```bash
 pnpm --filter worker dev

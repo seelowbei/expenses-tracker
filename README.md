@@ -27,7 +27,7 @@ The whole stack runs on the **Cloudflare Workers Free plan** ($0/month target).
 | Auth | `oauth4webapi` (Google OIDC + PKCE), own `sessions` table |
 | Database | Cloudflare D1 + Drizzle ORM |
 | Async jobs | Cloudflare Queues (producer + consumer in the same Worker), DLQ |
-| AI | Workers AI `@cf/meta/llama-3.2-11b-vision-instruct`; `env.AI.toMarkdown()` for PDFs |
+| AI | Workers AI `@cf/google/gemma-4-26b-a4b-it`; `env.AI.toMarkdown()` for PDFs |
 | File storage | Google Drive API v3, `drive.file` scope |
 | Validation | Zod (API bodies + LLM output) |
 | Tooling | pnpm workspaces, Wrangler, Vitest + `@cloudflare/vitest-plugin`, GitHub Actions |
@@ -94,7 +94,7 @@ infrastructure/
 
 **Cloudflare + Pulumi:** provision staging and production with [`infrastructure/`](./infrastructure/README.md). `foundation` creates D1 and the queues; `services` holds the Worker config and secrets.
 
-**Workers AI:** the Llama 3.2 Vision model requires accepting Meta's license once per Cloudflare account. Send one request to `@cf/meta/llama-3.2-11b-vision-instruct` with the prompt `agree` before the first real call.
+**Workers AI:** the extraction model, Gemma 4, needs no license step. Comparing against Llama 3.2 Vision in the eval needs Meta's license accepted once per account (`POST /api/dev/agree` on the local dev server).
 
 **Google Cloud**
 

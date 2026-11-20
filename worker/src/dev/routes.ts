@@ -4,7 +4,7 @@
 // into a deployed config, since a deployed APP_ORIGIN is always an https public host.
 import { Hono } from "hono";
 import { DEFAULT_CATEGORIES } from "../agent/categories";
-import { aiClient, extractReceipt, VISION_MODEL, type ImageMode, type ReceiptInput } from "../agent/extract";
+import { aiClient, extractReceipt, LLAMA_VISION_MODEL, VISION_MODEL, type ImageMode, type ReceiptInput } from "../agent/extract";
 import { MODEL_RATES, summarizeUsage } from "../agent/usage";
 import type { Bindings } from "../env";
 import { MAX_UPLOAD_BYTES, sniffMime } from "../lib/sniff";
@@ -31,10 +31,10 @@ devRoutes.use("*", async (c, next) => {
 // Workers AI confirms the license by throwing "5016: Thank you for agreeing to this model's terms...".
 const LICENSE_ACCEPTED = /\b5016\b/;
 
-/** One-time acceptance of Meta's Llama 3.2 license for this Cloudflare account. */
+/** One-time acceptance of Meta's Llama 3.2 license, needed only to compare against it with `eval --model`. */
 devRoutes.post("/agree", async (c) => {
   try {
-    const out = await c.env.AI.run(VISION_MODEL, { prompt: "agree" });
+    const out = await c.env.AI.run(LLAMA_VISION_MODEL, { prompt: "agree" });
     // Already accepted earlier: the model just answers the prompt.
     return c.json({ ok: true, status: "already_accepted", response: (out as { response?: unknown }).response ?? null });
   } catch (e) {

@@ -13,11 +13,14 @@ import {
 } from "./usage";
 import { postValidate, type LedgerDraft, type ReviewReason } from "./validate";
 
-export const VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
+// Chosen over Llama 3.2 11B Vision on the Nov 20, 2026 eval (spec, "Extraction agent").
+export const VISION_MODEL = "@cf/google/gemma-4-26b-a4b-it";
+/** The previous model, kept as an eval comparison (`--model`). */
+export const LLAMA_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
 const MAX_TOKENS = 1024; // up to 50 line items
-// Eval-only candidates that need extra input; reasoning models would spend MAX_TOKENS thinking.
+// Per-model extra input. Gemma 4 reasons by default and would spend MAX_TOKENS thinking, leaving no answer.
 const MODEL_INPUT: Record<string, Record<string, unknown>> = {
-  "@cf/google/gemma-4-26b-a4b-it": { chat_template_kwargs: { enable_thinking: false } },
+  [VISION_MODEL]: { chat_template_kwargs: { enable_thinking: false } },
 };
 
 /** Workers AI replies in `response`, or OpenAI-style in `choices[0].message.content` (newer models). */
