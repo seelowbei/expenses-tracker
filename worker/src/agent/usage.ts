@@ -7,6 +7,11 @@ export const MODEL_RATES: Record<string, { input: number; output: number }> = {
     input: 0.0485 / 0.011 / 1000, // ~0.00441
     output: 0.676 / 0.011 / 1000, // ~0.0615
   },
+  // Eval-only candidates (`/api/dev/extract` model switch); prices from Cloudflare's pricing page, Nov 2026.
+  "@cf/google/gemma-4-26b-a4b-it": { input: 0.1 / 0.011 / 1000, output: 0.3 / 0.011 / 1000 },
+  "@cf/meta/llama-4-scout-17b-16e-instruct": { input: 0.27 / 0.011 / 1000, output: 0.85 / 0.011 / 1000 },
+  "@cf/mistralai/mistral-small-3.1-24b-instruct": { input: 0.351 / 0.011 / 1000, output: 0.555 / 0.011 / 1000 },
+  "@cf/qwen/qwen3.8-27b": { input: 0.45 / 0.011 / 1000, output: 3.2 / 0.011 / 1000 },
 };
 
 export const TO_MARKDOWN_MODEL = "toMarkdown";

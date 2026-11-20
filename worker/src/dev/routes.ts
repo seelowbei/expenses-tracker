@@ -5,7 +5,7 @@
 import { Hono } from "hono";
 import { DEFAULT_CATEGORIES } from "../agent/categories";
 import { aiClient, extractReceipt, VISION_MODEL, type ImageMode, type ReceiptInput } from "../agent/extract";
-import { summarizeUsage } from "../agent/usage";
+import { MODEL_RATES, summarizeUsage } from "../agent/usage";
 import type { Bindings } from "../env";
 import { MAX_UPLOAD_BYTES, sniffMime } from "../lib/sniff";
 
@@ -44,7 +44,7 @@ devRoutes.post("/agree", async (c) => {
   }
 });
 
-/** Multipart `file` (JPEG/PNG/PDF). Optional `imageMode` = data_url | bytes. */
+/** Multipart `file` (JPEG/PNG/PDF). Optional `imageMode` = data_url | bytes; optional `model`, one of MODEL_RATES. */
 devRoutes.post("/extract", async (c) => {
   let form: FormData;
   try {
@@ -62,6 +62,9 @@ devRoutes.post("/extract", async (c) => {
 
   const modeParam = form.get("imageMode");
   const imageMode: ImageMode = modeParam === "bytes" ? "bytes" : "data_url";
+  const modelParam = form.get("model");
+  if (typeof modelParam === "string" && modelParam !== "" && !(modelParam in MODEL_RATES)) return c.json({ error: "unknown_model" }, 400);
+  const model = typeof modelParam === "string" && modelParam !== "" ? modelParam : VISION_MODEL;
   const input: ReceiptInput = mime === "application/pdf" ? { kind: "pdf", bytes } : { kind: "image", mimeType: mime, bytes };
 
   const started = Date.now();
@@ -71,12 +74,14 @@ devRoutes.post("/extract", async (c) => {
     locale: "en-SG",
     today: new Date().toISOString().slice(0, 10),
     imageMode,
+    model,
   });
 
   return c.json({
     mime,
     sizeBytes: bytes.length,
     imageMode,
+    model,
     elapsedMs: Date.now() - started,
     usage: summarizeUsage(result.calls),
     result,

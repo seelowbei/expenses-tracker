@@ -4,7 +4,7 @@
 //   pnpm --filter worker dev        # terminal 1 (needs Workers AI auth)
 //   pnpm --filter worker eval       # terminal 2
 //
-// Options: --dir <path>  --url <origin>  --only <substring>  --image-mode data_url|bytes  --limit <n>
+// Options: --dir <path>  --url <origin>  --only <substring>  --image-mode data_url|bytes  --limit <n>  --model <workers-ai-id>
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -24,6 +24,7 @@ const { values: args } = parseArgs({
     only: { type: "string" },
     "image-mode": { type: "string", default: "data_url" },
     limit: { type: "string" },
+    model: { type: "string" },
   },
 });
 
@@ -111,6 +112,7 @@ async function main() {
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(bytes)], { type: isPdf ? "application/pdf" : "image/jpeg" }), f);
     form.append("imageMode", args["image-mode"]!);
+    if (args.model) form.append("model", args.model);
 
     const res = await fetch(`${args.url}/api/dev/extract`, { method: "POST", body: form });
     if (!res.ok) throw new Error(`${f}: HTTP ${res.status} ${await res.text()}`);
