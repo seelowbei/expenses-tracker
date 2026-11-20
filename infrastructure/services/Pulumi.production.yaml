@@ -3,6 +3,7 @@ config:
   # Optional custom domain (otherwise served on workers.dev):
   #   expense-services:customDomain        expenses.example.com
   #   expense-services:zoneId              <cloudflare-zone-id>
+  # Optional: expense-services:driveFolderName (default "Expense Receipts (<env>)", production "Expense Receipts")
   expense-services:defaultCurrency: SGD
   expense-services:appOrigin: https://expense-tracker.seelowbei.workers.dev
   expense-services:googleClientId:

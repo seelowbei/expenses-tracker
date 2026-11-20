@@ -5,14 +5,16 @@ import { decryptToken } from "../src/auth/crypto";
 import { STATE_COOKIE } from "../src/auth/routes";
 import { SESSION_COOKIE, validateSession } from "../src/auth/session";
 import { users } from "../src/db/schema";
+import type { Bindings } from "../src/env";
 import { clearAccessTokenCache } from "../src/drive/access";
-import { ALL_SCOPES, cookieValue, db, FOLDER_URL, fakeGoogle, idToken, json, makeApp, ORIGIN, seedUser, setCookies, TOKEN_URL, tokenResponse } from "./helpers";
+import { ALL_SCOPES, cookieValue, db, FOLDER_URL, fakeGoogle, idToken, json, makeApp, ORIGIN, requestWithEnv, seedUser, setCookies, TOKEN_URL, tokenResponse } from "./helpers";
 
 beforeEach(() => clearAccessTokenCache());
 
 /** Starts sign-in, then calls the callback with Google's answer. Returns the final response. */
-async function signIn(google: ReturnType<typeof fakeGoogle>, start = "/auth/google") {
-  const { request } = makeApp(google);
+async function signIn(google: ReturnType<typeof fakeGoogle>, start = "/auth/google", env: Partial<Bindings> = {}) {
+  const { app } = makeApp(google);
+  const request = requestWithEnv(app, env);
   const res1 = await request(start);
   expect(res1.status).toBe(302);
   const location = new URL(res1.headers.get("Location")!);
@@ -91,6 +93,17 @@ describe("GET /auth/google/callback", () => {
     expect(session).toMatch(/Secure/);
     expect(session).toMatch(/SameSite=Lax/);
     expect((await validateSession(db(), cookieValue(session)))?.user.id).toBe(user!.id);
+  });
+
+  it("names the new Drive folder from DRIVE_FOLDER_NAME", async () => {
+    const sub = `sub-${crypto.randomUUID()}`;
+    const google = fakeGoogle({
+      [TOKEN_URL]: () => tokenResponse({ sub, email: `${sub}@example.com`, refreshToken: "1//rt" }),
+      [FOLDER_URL]: () => json({ id: "folder-staging" }),
+    });
+    const { res } = await signIn(google, "/auth/google", { DRIVE_FOLDER_NAME: "Expense Receipts (staging)" });
+    expect(res.headers.get("Location")).toBe("/");
+    expect(JSON.parse(google.callsTo(FOLDER_URL)[0]!.body).name).toBe("Expense Receipts (staging)");
   });
 
   it("rejects unverified emails and a missing Drive scope", async () => {

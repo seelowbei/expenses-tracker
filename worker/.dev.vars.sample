@@ -17,7 +17,9 @@ TOKEN_ENC_KEY=
 # 32 random bytes, base64: openssl rand -base64 32. Signs the OAuth state cookie.  [sessionSecret]
 SESSION_SECRET=
 
-# Non-secret vars come from wrangler.jsonc "vars" (APP_ORIGIN, DEFAULT_CURRENCY, DEV_ROUTES).
+# Non-secret vars come from wrangler.jsonc "vars" (APP_ORIGIN, DEFAULT_CURRENCY, DEV_ROUTES,
+# DRIVE_FOLDER_NAME).
 # Uncomment to override locally:
 # APP_ORIGIN=http://localhost:8787
 # DEFAULT_CURRENCY=SGD
+# DRIVE_FOLDER_NAME=Expense Receipts (local)

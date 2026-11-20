@@ -95,10 +95,13 @@ export async function withDrive<T>(env: Bindings, deps: AppDeps, db: Db, user: U
   }
 }
 
-/** Returns the user's folder id, creating `Expense Receipts` if missing (or `force`, when Drive says it's gone). */
-export async function ensureFolder(db: Db, user: User, drive: DriveApi, force = false): Promise<string> {
+/**
+ * Returns the user's folder id, creating it if missing (or `force`, when Drive says it's gone).
+ * `name` (DRIVE_FOLDER_NAME) only applies to new folders; empty means the default `Expense Receipts`.
+ */
+export async function ensureFolder(db: Db, user: User, drive: DriveApi, name: string | undefined, force = false): Promise<string> {
   if (user.driveFolderId && !force) return user.driveFolderId;
-  const id = await drive.createFolder();
+  const id = await drive.createFolder(name || undefined);
   await db.update(users).set({ driveFolderId: id }).where(eq(users.id, user.id));
   user.driveFolderId = id;
   return id;

@@ -5,6 +5,7 @@ config:
   #   expense-services:googleClientSecret  --secret
   #   expense-services:tokenEncKey         --secret  (openssl rand -base64 32)
   #   expense-services:sessionSecret       --secret
+  # Optional: expense-services:driveFolderName (default "Expense Receipts (<env>)", production "Expense Receipts")
   expense-services:defaultCurrency: SGD
   expense-services:appOrigin: https://expense-tracker-staging.seelowbei.workers.dev
   expense-services:googleClientId:
